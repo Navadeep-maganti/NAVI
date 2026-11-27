@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from feature_engineering import FeaturePreparationRequest, build_features
-from behavioral_learning import learn_behavior_profile
+from behavioral_learning import AdaptiveLearnRequest, adapt_behavior_profile, learn_behavior_profile
 from behavioral_anomaly import AnomalyRequest, detect_behavior_anomaly
 from area_safety import AreaSafetyRequest, assess_area_safety
 
@@ -55,6 +55,12 @@ def prepare_location_features(request: FeaturePreparationRequest) -> dict:
 def learn_behavior(request: FeaturePreparationRequest) -> dict:
     """Learn frequent places, routine routes, and time activity from historical points."""
     return learn_behavior_profile(request.locations)
+
+
+@app.post("/v1/behavior-profile/adapt", dependencies=[Depends(verify_service_key)])
+def adapt_behavior(request: AdaptiveLearnRequest) -> dict:
+    """Adapt behavioral profile over a rolling window while excluding temporary anomalies."""
+    return adapt_behavior_profile(request)
 
 
 @app.post("/v1/behavior/analyze", dependencies=[Depends(verify_service_key)])

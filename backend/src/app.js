@@ -19,6 +19,7 @@ const alertRoutes = require("./routes/alertRoutes");
 const liveShareRoutes = require("./routes/liveShareRoutes");
 const { initSocketServer } = require("./services/socketService");
 const { processExpiredCheckins } = require("./services/alertEscalationService");
+const { runPeriodicReclustering } = require("./services/adaptiveLearningService");
 
 const app = express();
 
@@ -61,6 +62,14 @@ const escalationTimer = setInterval(() => {
   });
 }, 30000);
 escalationTimer.unref();
+
+// Periodically re-cluster stale behavioral profiles over a rolling 30-day window (every 6 hours).
+const reclusterTimer = setInterval(() => {
+  runPeriodicReclustering({ staleAfterHours: 24, batchLimit: 25 }).catch((err) => {
+    console.error("Periodic re-clustering failed:", err.message);
+  });
+}, 6 * 60 * 60 * 1000);
+reclusterTimer.unref();
 
 const PORT = process.env.PORT || 5000;
 

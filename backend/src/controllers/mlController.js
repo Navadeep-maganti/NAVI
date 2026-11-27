@@ -6,6 +6,7 @@ const SafeSession = require("../models/SafeSession");
 const { findActiveAreaZones } = require("./areaRiskController");
 const { evaluateSafetyDecision } = require("../services/safetyDecisionEngine");
 const { createCheckinFromDecision } = require("../services/alertEscalationService");
+const { reclusterUserProfile } = require("../services/adaptiveLearningService");
 
 const predictLocationRisk = async (req, res) => {
   const { latitude, longitude, accuracy, speed, timestamp } = req.body;
@@ -181,4 +182,33 @@ const assessMySafety = async (req, res) => {
   }
 };
 
-module.exports = { predictLocationRisk, learnMyBehaviorProfile, analyzeMyBehavior, assessMySafety };
+const adaptMyBehaviorProfile = async (req, res) => {
+  const windowDays = req.query.days === undefined ? 30 : Number(req.query.days);
+  const adaptationRate = req.body?.adaptationRate === undefined ? 0.35 : Number(req.body.adaptationRate);
+
+  if (!Number.isInteger(windowDays) || windowDays < 7 || windowDays > 90) {
+    return res.status(400).json({ success: false, message: "days must be an integer from 7 to 90" });
+  }
+  if (!Number.isFinite(adaptationRate) || adaptationRate <= 0 || adaptationRate > 1) {
+    return res.status(400).json({ success: false, message: "adaptationRate must be in (0, 1]" });
+  }
+
+  try {
+    const result = await reclusterUserProfile(req.user.id, { windowDays, adaptationRate });
+    return res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    return res.status(error.status === 422 ? 400 : 502).json({
+      success: false,
+      message: error.status === 422 ? "Invalid historical location data" : "Adaptive learning service is unavailable",
+      error: error.message,
+    });
+  }
+};
+
+module.exports = {
+  predictLocationRisk,
+  learnMyBehaviorProfile,
+  adaptMyBehaviorProfile,
+  analyzeMyBehavior,
+  assessMySafety,
+};
