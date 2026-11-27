@@ -1,4 +1,5 @@
 const Location = require('../models/Location');
+const User = require('../models/User');
 const LiveShareSession = require('../models/LiveShareSession');
 const { emitToUser, emitToShareRoom } = require('../services/notificationService');
 
@@ -37,6 +38,15 @@ const parseDate = (value) => {
 
 const updateLocation = async (req,res) => {
     try{
+        const userRecord = await User.findById(req.user.id).select('locationTrackingConsent').lean();
+        if (userRecord && userRecord.locationTrackingConsent === false) {
+            return res.status(403).json({
+                success: false,
+                code: "CONSENT_WITHDRAWN",
+                message: "Location tracking is disabled by user privacy preferences",
+            });
+        }
+
         const { latitude, longitude, altitude, speed = 0, accuracy, timestamp, recordedAt: requestRecordedAt } = req.body;
         const receivedTimestamp = timestamp ?? requestRecordedAt;
         const recordedAt = receivedTimestamp === undefined ? new Date() : new Date(receivedTimestamp);
