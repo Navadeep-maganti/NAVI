@@ -5,6 +5,7 @@ const Preference = require("../models/Preference");
 const SafeSession = require("../models/SafeSession");
 const { findActiveAreaZones } = require("./areaRiskController");
 const { evaluateSafetyDecision } = require("../services/safetyDecisionEngine");
+const { createCheckinFromDecision } = require("../services/alertEscalationService");
 
 const predictLocationRisk = async (req, res) => {
   const { latitude, longitude, accuracy, speed, timestamp } = req.body;
@@ -165,7 +166,12 @@ const assessMySafety = async (req, res) => {
       preferences,
       activeSession,
     });
-    return res.status(200).json({ success: true, assessment, decision });
+    const checkinAlert = await createCheckinFromDecision({
+      userId: req.user.id,
+      currentLocation,
+      decision,
+    });
+    return res.status(200).json({ success: true, assessment, decision, checkinAlert });
   } catch (error) {
     return res.status(error.status === 422 ? 400 : 502).json({
       success: false,
