@@ -12,7 +12,7 @@ from behavioral_anomaly import AnomalyRequest, detect_behavior_anomaly
 from area_safety import AreaSafetyRequest, assess_area_safety
 
 
-app = FastAPI(title="SafeCity ML Service", version="1.0.0")
+app = FastAPI(title="NAVI ML Service", version="1.0.0")
 SERVICE_API_KEY = os.getenv("ML_SERVICE_API_KEY")
 
 
@@ -42,7 +42,7 @@ def verify_service_key(x_ml_service_key: str | None = Header(default=None)) -> N
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
-    return {"status": "ok", "service": "safecity-ml"}
+    return {"status": "ok", "service": "navi-ml"}
 
 
 @app.post("/v1/features/location-window", dependencies=[Depends(verify_service_key)])

@@ -98,7 +98,7 @@ const viewLiveShareByToken = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      sharedBy: session.user?.name || "SafeCity User",
+      sharedBy: session.user?.name || "NAVI User",
       lastLocation: session.lastLocation || null,
       expiresAt: session.expiresAt,
       emergencyStatus: activeEmergency || null,

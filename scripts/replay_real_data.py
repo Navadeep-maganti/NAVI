@@ -1,4 +1,4 @@
-"""Replay real GPS traces (.gpx, .csv, or GeoLife .plt) into SafeCity and verify ML output."""
+"""Replay real GPS traces (.gpx, .csv, or GeoLife .plt) into NAVI and verify ML output."""
 
 from __future__ import annotations
 
@@ -229,7 +229,7 @@ def run_probes(analyze_fn, sample_place: dict | None, fallback_point: dict) -> N
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Replay real GPS data into SafeCity and inspect ML behavior.")
+    parser = argparse.ArgumentParser(description="Replay real GPS data into NAVI and inspect ML behavior.")
     parser.add_argument("--input", required=True, type=Path, help="Path to .gpx, .csv, .plt file, or directory of traces")
     parser.add_argument("--backend-url", default="http://127.0.0.1:5000")
     parser.add_argument("--ml-url", default="http://127.0.0.1:8000")

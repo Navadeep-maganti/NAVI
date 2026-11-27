@@ -60,7 +60,7 @@ const notifyTrustedContacts = async ({ userId, alert }) => {
       alertId: String(alert._id),
       type: alert.type,
       triggerReason: alert.triggerReason,
-      user: { id: String(userId), name: user?.name || "SafeCity User", email: user?.email || "" },
+      user: { id: String(userId), name: user?.name || "NAVI User", email: user?.email || "" },
       contact: { id: String(contact._id), name: contact.name, phone: contact.phone, email: contact.email },
       location: alert.location || null,
       mapsUrl,

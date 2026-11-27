@@ -1,4 +1,4 @@
-"""Sync objective area-safety zones from OpenStreetMap (Overpass API) into SafeCity."""
+"""Sync objective area-safety zones from OpenStreetMap (Overpass API) into NAVI."""
 
 from __future__ import annotations
 

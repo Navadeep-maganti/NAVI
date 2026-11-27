@@ -1,8 +1,8 @@
-# SafeCity
+# NAVI — Navigation Aware Vigilance Intelligence
 
 **Context-Aware Personal Safety & Behavioral Intelligence Platform**
 
-SafeCity combines user-specific spatial-temporal behavioral modeling, objective area-risk intelligence, user-declared activity sessions, and real-time Socket.IO escalation to detect genuine safety risks while minimizing false emergency alerts.
+NAVI combines user-specific spatial-temporal behavioral modeling, objective area-risk intelligence, user-declared activity sessions, and real-time Socket.IO escalation to detect genuine safety risks while minimizing false emergency alerts.
 
 ---
 
@@ -68,7 +68,7 @@ Starts MongoDB (`:27017`), FastAPI ML Service (`:8000`), and Node.js Backend (`:
 1. **Configure `backend/.env`** (copy from `backend/.env.example`):
    ```env
    PORT=5000
-   MONGO_URI=mongodb://127.0.0.1:27017/safecity
+   MONGO_URI=mongodb://127.0.0.1:27017/navi
    JWT_SECRET=replace-with-a-long-random-secret
    ML_SERVICE_URL=http://127.0.0.1:8000
    ML_SERVICE_TIMEOUT_MS=5000

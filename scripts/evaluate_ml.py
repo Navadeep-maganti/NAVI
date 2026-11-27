@@ -1,4 +1,4 @@
-"""Evaluate SafeCity ML clustering, anomaly detection, and false-positive rate."""
+"""Evaluate NAVI ML clustering, anomaly detection, and false-positive rate."""
 
 from __future__ import annotations
 
