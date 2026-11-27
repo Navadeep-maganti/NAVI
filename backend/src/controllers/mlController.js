@@ -1,6 +1,7 @@
-const { getLocationRisk, learnBehaviorProfile, analyzeBehavior } = require("../services/mlService");
+const { getLocationRisk, learnBehaviorProfile, analyzeBehavior, assessAreaSafety } = require("../services/mlService");
 const Location = require("../models/Location");
 const BehaviorProfile = require("../models/BehaviorProfile");
+const { findActiveAreaZones } = require("./areaRiskController");
 
 const predictLocationRisk = async (req, res) => {
   const { latitude, longitude, accuracy, speed, timestamp } = req.body;
@@ -114,4 +115,51 @@ const analyzeMyBehavior = async (req, res) => {
   }
 };
 
-module.exports = { predictLocationRisk, learnMyBehaviorProfile, analyzeMyBehavior };
+const assessMySafety = async (req, res) => {
+  const { latitude, longitude, speed = 0, accuracy = 10, timestamp } = req.body;
+  if (typeof latitude !== "number" || !Number.isFinite(latitude) || typeof longitude !== "number" || !Number.isFinite(longitude)) {
+    return res.status(400).json({ success: false, message: "latitude and longitude must be finite numbers" });
+  }
+  const recordedAt = timestamp === undefined ? new Date() : new Date(timestamp);
+  if (Number.isNaN(recordedAt.getTime())) {
+    return res.status(400).json({ success: false, message: "timestamp is invalid" });
+  }
+
+  try {
+    const [areaZones, profile, recentHistory] = await Promise.all([
+      findActiveAreaZones(latitude, longitude, 2000),
+      BehaviorProfile.findOne({ user: req.user.id })
+        .select("regularPlaces routineRoutes activityPatterns movementBaseline")
+        .lean(),
+      Location.find({ user: req.user.id, recordedAt: { $lt: recordedAt } })
+        .select("latitude longitude speed accuracy recordedAt")
+        .sort({ recordedAt: -1 })
+        .limit(10)
+        .lean(),
+    ]);
+
+    const toMlPoint = (point) => ({
+      latitude: point.latitude,
+      longitude: point.longitude,
+      speed: point.speed,
+      accuracy: point.accuracy,
+      timestamp: point.recordedAt.toISOString(),
+    });
+
+    const assessment = await assessAreaSafety({
+      currentLocation: { latitude, longitude, speed, accuracy, timestamp: recordedAt.toISOString() },
+      recentLocations: profile ? recentHistory.reverse().map(toMlPoint) : [],
+      areaZones,
+      profile: profile || null,
+    });
+    return res.status(200).json({ success: true, assessment });
+  } catch (error) {
+    return res.status(error.status === 422 ? 400 : 502).json({
+      success: false,
+      message: error.status === 422 ? "Invalid safety assessment request" : "Safety assessment service is unavailable",
+      error: error.message,
+    });
+  }
+};
+
+module.exports = { predictLocationRisk, learnMyBehaviorProfile, analyzeMyBehavior, assessMySafety };

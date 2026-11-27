@@ -8,9 +8,9 @@ const mlClient = axios.create({
     : {},
 });
 
-const getLocationRisk = async (location) => {
+const postToMl = async (path, payload) => {
   try {
-    const response = await mlClient.post("/v1/location-risk", location);
+    const response = await mlClient.post(path, payload);
     return response.data;
   } catch (error) {
     const serviceError = new Error(
@@ -21,30 +21,9 @@ const getLocationRisk = async (location) => {
   }
 };
 
-const learnBehaviorProfile = async (locations) => {
-  try {
-    const response = await mlClient.post("/v1/behavior-profile/learn", { locations });
-    return response.data;
-  } catch (error) {
-    const serviceError = new Error(
-      error.response?.data?.detail || error.message || "ML service request failed"
-    );
-    serviceError.status = error.response?.status;
-    throw serviceError;
-  }
-};
+const getLocationRisk = (location) => postToMl("/v1/location-risk", location);
+const learnBehaviorProfile = (locations) => postToMl("/v1/behavior-profile/learn", { locations });
+const analyzeBehavior = (payload) => postToMl("/v1/behavior/analyze", payload);
+const assessAreaSafety = (payload) => postToMl("/v1/area-safety/assess", payload);
 
-const analyzeBehavior = async (payload) => {
-  try {
-    const response = await mlClient.post("/v1/behavior/analyze", payload);
-    return response.data;
-  } catch (error) {
-    const serviceError = new Error(
-      error.response?.data?.detail || error.message || "ML service request failed"
-    );
-    serviceError.status = error.response?.status;
-    throw serviceError;
-  }
-};
-
-module.exports = { getLocationRisk, learnBehaviorProfile, analyzeBehavior };
+module.exports = { getLocationRisk, learnBehaviorProfile, analyzeBehavior, assessAreaSafety };

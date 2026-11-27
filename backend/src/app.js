@@ -12,6 +12,7 @@ const locationRoutes = require("./routes/locationRoutes");
 const preferenceRoutes = require("./routes/preferenceRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const mlRoutes = require("./routes/mlRoutes");
+const areaRiskRoutes = require("./routes/areaRiskRoutes");
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use("/api/location", locationRoutes);
 app.use("/api/preferences", preferenceRoutes);
 app.use("/api/contacts", contactRoutes);
 app.use("/api/ml", mlRoutes);
+app.use("/api/area-risk", areaRiskRoutes);
 
 app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
