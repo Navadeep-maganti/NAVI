@@ -1,7 +1,10 @@
 const { getLocationRisk, learnBehaviorProfile, analyzeBehavior, assessAreaSafety } = require("../services/mlService");
 const Location = require("../models/Location");
 const BehaviorProfile = require("../models/BehaviorProfile");
+const Preference = require("../models/Preference");
+const SafeSession = require("../models/SafeSession");
 const { findActiveAreaZones } = require("./areaRiskController");
+const { evaluateSafetyDecision } = require("../services/safetyDecisionEngine");
 
 const predictLocationRisk = async (req, res) => {
   const { latitude, longitude, accuracy, speed, timestamp } = req.body;
@@ -126,7 +129,8 @@ const assessMySafety = async (req, res) => {
   }
 
   try {
-    const [areaZones, profile, recentHistory] = await Promise.all([
+    const now = new Date();
+    const [areaZones, profile, recentHistory, preferences, activeSession] = await Promise.all([
       findActiveAreaZones(latitude, longitude, 2000),
       BehaviorProfile.findOne({ user: req.user.id })
         .select("regularPlaces routineRoutes activityPatterns movementBaseline")
@@ -136,6 +140,8 @@ const assessMySafety = async (req, res) => {
         .sort({ recordedAt: -1 })
         .limit(10)
         .lean(),
+      Preference.findOne({ user: req.user.id }).lean(),
+      SafeSession.findOne({ user: req.user.id, status: "active", endsAt: { $gt: now } }).lean(),
     ]);
 
     const toMlPoint = (point) => ({
@@ -146,13 +152,20 @@ const assessMySafety = async (req, res) => {
       timestamp: point.recordedAt.toISOString(),
     });
 
+    const currentLocation = { latitude, longitude, speed, accuracy, timestamp: recordedAt.toISOString() };
     const assessment = await assessAreaSafety({
-      currentLocation: { latitude, longitude, speed, accuracy, timestamp: recordedAt.toISOString() },
+      currentLocation,
       recentLocations: profile ? recentHistory.reverse().map(toMlPoint) : [],
       areaZones,
       profile: profile || null,
     });
-    return res.status(200).json({ success: true, assessment });
+    const decision = evaluateSafetyDecision({
+      assessment,
+      currentLocation,
+      preferences,
+      activeSession,
+    });
+    return res.status(200).json({ success: true, assessment, decision });
   } catch (error) {
     return res.status(error.status === 422 ? 400 : 502).json({
       success: false,
