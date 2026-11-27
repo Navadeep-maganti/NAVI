@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from feature_engineering import FeaturePreparationRequest, build_features
 from behavioral_learning import learn_behavior_profile
+from behavioral_anomaly import AnomalyRequest, detect_behavior_anomaly
 
 
 app = FastAPI(title="SafeCity ML Service", version="1.0.0")
@@ -53,6 +54,11 @@ def prepare_location_features(request: FeaturePreparationRequest) -> dict:
 def learn_behavior(request: FeaturePreparationRequest) -> dict:
     """Learn frequent places, routine routes, and time activity from historical points."""
     return learn_behavior_profile(request.locations)
+
+
+@app.post("/v1/behavior/analyze", dependencies=[Depends(verify_service_key)])
+def analyze_behavior(request: AnomalyRequest) -> dict:
+    return detect_behavior_anomaly(request)
 
 
 @app.post("/v1/location-risk", response_model=LocationRiskResponse, dependencies=[Depends(verify_service_key)])

@@ -34,4 +34,17 @@ const learnBehaviorProfile = async (locations) => {
   }
 };
 
-module.exports = { getLocationRisk, learnBehaviorProfile };
+const analyzeBehavior = async (payload) => {
+  try {
+    const response = await mlClient.post("/v1/behavior/analyze", payload);
+    return response.data;
+  } catch (error) {
+    const serviceError = new Error(
+      error.response?.data?.detail || error.message || "ML service request failed"
+    );
+    serviceError.status = error.response?.status;
+    throw serviceError;
+  }
+};
+
+module.exports = { getLocationRisk, learnBehaviorProfile, analyzeBehavior };

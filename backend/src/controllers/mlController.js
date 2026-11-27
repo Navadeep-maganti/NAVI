@@ -1,5 +1,4 @@
-const { getLocationRisk } = require("../services/mlService");
-const { learnBehaviorProfile } = require("../services/mlService");
+const { getLocationRisk, learnBehaviorProfile, analyzeBehavior } = require("../services/mlService");
 const Location = require("../models/Location");
 const BehaviorProfile = require("../models/BehaviorProfile");
 
@@ -67,4 +66,52 @@ const learnMyBehaviorProfile = async (req, res) => {
   }
 };
 
-module.exports = { predictLocationRisk, learnMyBehaviorProfile };
+const analyzeMyBehavior = async (req, res) => {
+  const { latitude, longitude, speed, accuracy, timestamp } = req.body;
+  const recordedAt = timestamp === undefined ? new Date() : new Date(timestamp);
+  if (Number.isNaN(recordedAt.getTime())) {
+    return res.status(400).json({ success: false, message: "timestamp is invalid" });
+  }
+
+  try {
+    const profile = await BehaviorProfile.findOne({ user: req.user.id })
+      .select("regularPlaces routineRoutes activityPatterns movementBaseline")
+      .lean();
+    if (!profile) {
+      return res.status(409).json({
+        success: false,
+        message: "A behavioral profile is required before anomaly detection",
+      });
+    }
+
+    const recentHistory = await Location.find({
+      user: req.user.id,
+      recordedAt: { $lt: recordedAt },
+    })
+      .select("latitude longitude speed accuracy recordedAt")
+      .sort({ recordedAt: -1 })
+      .limit(10)
+      .lean();
+    const toMlPoint = (point) => ({
+      latitude: point.latitude,
+      longitude: point.longitude,
+      speed: point.speed,
+      accuracy: point.accuracy,
+      timestamp: point.recordedAt.toISOString(),
+    });
+    const result = await analyzeBehavior({
+      currentLocation: { latitude, longitude, speed, accuracy, timestamp: recordedAt.toISOString() },
+      recentLocations: recentHistory.reverse().map(toMlPoint),
+      profile,
+    });
+    return res.status(200).json({ success: true, analysis: result });
+  } catch (error) {
+    return res.status(error.status === 422 ? 400 : 502).json({
+      success: false,
+      message: error.status === 422 ? "Invalid behavior analysis request" : "Behavior analysis service is unavailable",
+      error: error.message,
+    });
+  }
+};
+
+module.exports = { predictLocationRisk, learnMyBehaviorProfile, analyzeMyBehavior };

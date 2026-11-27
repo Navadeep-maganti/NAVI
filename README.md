@@ -77,6 +77,17 @@ POST /api/ml/behavior-profile/learn?days=30
 Authorization: Bearer <token>
 ```
 
-Regular places are found with spatial **DBSCAN** using haversine distance, `eps=100` metres, and `min_samples=5`. DBSCAN noise points are excluded rather than incorrectly classified as familiar places. The profile also records recurring cluster-to-cluster transitions as routine routes and hour/weekday activity counts.
+Regular places are found with spatial **DBSCAN** using haversine distance, `eps=100` metres, and `min_samples=5`. Each place includes a centroid and a boundary (`boundingBox`, maximum radius, and 95th-percentile radius). DBSCAN noise points are excluded rather than incorrectly classified as familiar places and are returned as capped `unfamiliarLocations`; unfamiliar does not mean unsafe. The profile also records recurring cluster-to-cluster transitions as routine routes and hour/weekday activity counts.
 
 The learner requires at least 50 valid points spanning seven days before persisting a profile. Until then, it returns `profileReady: false` with `dataSufficiency`, so the app can tell the user that it is still learning without making unsupported assumptions.
+
+## Behavioral anomaly detection
+
+After a profile is ready, send the current validated point to the authenticated backend endpoint:
+
+```http
+POST /api/ml/behavior/analyze
+Authorization: Bearer <token>
+```
+
+The response includes a `deviationScore` from 0 to 1, a `normal`, `elevated`, or `high` level, and separate explainable signals for unusual location, travel time, route, and movement speed. An elevated score is an assistive signal only; it must not autonomously contact emergency services.
