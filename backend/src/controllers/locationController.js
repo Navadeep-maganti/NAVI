@@ -8,6 +8,9 @@ const DUPLICATE_TIME_MS = 10 * 1000;
 const MAX_SPEED_METRES_PER_SECOND = 55.56; // 200 km/h
 const MAX_FUTURE_TIME_MS = 5 * 60 * 1000;
 const MAX_LOCATION_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const HISTORY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_HISTORY_LIMIT = 500;
+const MAX_HISTORY_LIMIT = 1000;
 
 const isFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value);
 
@@ -22,6 +25,12 @@ const distanceInMetres = (from, to) => {
         * Math.sin(longitudeDelta / 2) ** 2;
 
     return 2 * earthRadius * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const parseDate = (value) => {
+    if (typeof value !== 'string' && typeof value !== 'number') return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
 };
 
 const updateLocation = async (req,res) => {
@@ -124,6 +133,66 @@ const updateLocation = async (req,res) => {
     }
 };
 
+// GET /api/location/history?startDate=...&endDate=...&limit=...&cursor=...
+// Without date filters this returns the latest rolling 30 days of locations.
+const getLocationHistory = async (req, res) => {
+    try {
+        const { startDate, endDate, cursor, limit: requestedLimit } = req.query;
+        const end = endDate === undefined ? new Date() : parseDate(endDate);
+        const start = startDate === undefined
+            ? new Date(end?.getTime() - HISTORY_WINDOW_MS)
+            : parseDate(startDate);
+        const cursorDate = cursor === undefined ? null : parseDate(cursor);
+        const limit = requestedLimit === undefined ? DEFAULT_HISTORY_LIMIT : Number(requestedLimit);
+
+        if (!start || !end || (cursor !== undefined && !cursorDate)) {
+            return res.status(400).json({
+                success: false,
+                message: "startDate, endDate, and cursor must be valid ISO-8601 dates or timestamps",
+            });
+        }
+        if (start > end) {
+            return res.status(400).json({ success: false, message: "startDate must be before endDate" });
+        }
+        if (!Number.isInteger(limit) || limit < 1 || limit > MAX_HISTORY_LIMIT) {
+            return res.status(400).json({
+                success: false,
+                message: `limit must be an integer between 1 and ${MAX_HISTORY_LIMIT}`,
+            });
+        }
+
+        const recordedAt = { $gte: start, $lte: end };
+        if (cursorDate) recordedAt.$lt = cursorDate;
+
+        // The { user: 1, recordedAt: -1 } index satisfies this filter and sort.
+        const locations = await Location.find({ user: req.user.id, recordedAt })
+            .select('latitude longitude altitude speed accuracy recordedAt createdAt')
+            .sort({ recordedAt: -1 })
+            .limit(limit + 1)
+            .lean();
+
+        const hasMore = locations.length > limit;
+        if (hasMore) locations.pop();
+
+        return res.status(200).json({
+            success: true,
+            count: locations.length,
+            dateRange: { startDate: start, endDate: end },
+            locations,
+            pagination: {
+                hasMore,
+                nextCursor: hasMore ? locations[locations.length - 1].recordedAt.toISOString() : null,
+            },
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Failed to retrieve location history",
+        });
+    }
+};
+
 module.exports = {
     updateLocation,
+    getLocationHistory,
 };

@@ -6,7 +6,6 @@ const locationSchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
             required: true,
-            index: true,
         },
 
         latitude: {
@@ -46,7 +45,6 @@ const locationSchema = new mongoose.Schema(
         recordedAt: {
             type: Date,
             default: Date.now,
-            index: true,
         },
     },
     {
