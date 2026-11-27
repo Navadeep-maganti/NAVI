@@ -1,6 +1,6 @@
 const SafetyAlert = require("../models/SafetyAlert");
 const Preference = require("../models/Preference");
-const { emitToUser, notifyTrustedContacts } = require("./notificationService");
+const { emitToUser, emitEmergencyStatus, notifyTrustedContacts } = require("./notificationService");
 
 const DEFAULT_CHECKIN_TIMEOUT_SECONDS = 120;
 
@@ -66,6 +66,13 @@ const createCheckinFromDecision = async ({ userId, currentLocation, decision }) 
     recommendedAction: decision.recommendedAction,
     checkinDeadline: alert.checkinDeadline.toISOString(),
   });
+  await emitEmergencyStatus(userId, {
+    alertId: String(alert._id),
+    type: alert.type,
+    status: alert.status,
+    triggerReason: alert.triggerReason,
+    timestamp: now.toISOString(),
+  });
 
   return alert;
 };
@@ -85,6 +92,13 @@ const respondToAlert = async ({ userId, alertId, response }) => {
     alert.status = response === "safe" ? "resolved_safe" : "cancelled";
     alert.userResponse = "safe";
     await alert.save();
+    await emitEmergencyStatus(userId, {
+      alertId: String(alert._id),
+      type: alert.type,
+      status: alert.status,
+      triggerReason: alert.triggerReason,
+      timestamp: now.toISOString(),
+    });
     return { alert };
   }
 
@@ -96,6 +110,13 @@ const respondToAlert = async ({ userId, alertId, response }) => {
   alert.escalatedAt = now;
   alert.notifiedContacts = await notifyTrustedContacts({ userId, alert });
   await alert.save();
+  await emitEmergencyStatus(userId, {
+    alertId: String(alert._id),
+    type: alert.type,
+    status: alert.status,
+    triggerReason: alert.triggerReason,
+    timestamp: now.toISOString(),
+  });
 
   return { alert };
 };
@@ -120,6 +141,14 @@ const triggerManualSOS = async ({ userId, location = {}, notes }) => {
 
   alert.notifiedContacts = await notifyTrustedContacts({ userId, alert });
   await alert.save();
+  await emitEmergencyStatus(userId, {
+    alertId: String(alert._id),
+    type: alert.type,
+    status: alert.status,
+    triggerReason: alert.triggerReason,
+    location: alert.location,
+    timestamp: now.toISOString(),
+  });
   return alert;
 };
 
@@ -144,6 +173,13 @@ const processExpiredCheckins = async (now = new Date()) => {
       alert.notifiedContacts = await notifyTrustedContacts({ userId: alert.user, alert });
     }
     await alert.save();
+    await emitEmergencyStatus(alert.user, {
+      alertId: String(alert._id),
+      type: alert.type,
+      status: alert.status,
+      triggerReason: alert.triggerReason,
+      timestamp: now.toISOString(),
+    });
     escalatedCount += 1;
   }
 

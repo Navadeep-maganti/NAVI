@@ -1,6 +1,7 @@
 const axios = require("axios");
 const TrustedContact = require("../models/TrustedContact");
 const User = require("../models/User");
+const LiveShareSession = require("../models/LiveShareSession");
 
 let socketServer = null;
 
@@ -11,6 +12,30 @@ const setSocketServer = (io) => {
 const emitToUser = (userId, event, payload) => {
   if (socketServer) {
     socketServer.to(`user:${String(userId)}`).emit(event, payload);
+  }
+};
+
+const emitToShareRoom = (shareToken, event, payload) => {
+  if (socketServer && shareToken) {
+    socketServer.to(`share:${shareToken}`).emit(event, payload);
+  }
+};
+
+const emitEmergencyStatus = async (userId, payload) => {
+  emitToUser(userId, "emergency:status", payload);
+  if (!socketServer) return;
+
+  const now = new Date();
+  const activeShares = await LiveShareSession.find({
+    user: userId,
+    status: "active",
+    expiresAt: { $gt: now },
+  })
+    .select("shareToken")
+    .lean();
+
+  for (const share of activeShares) {
+    emitToShareRoom(share.shareToken, "emergency:status", payload);
   }
 };
 
@@ -83,6 +108,8 @@ const notifyTrustedContacts = async ({ userId, alert }) => {
 module.exports = {
   setSocketServer,
   emitToUser,
+  emitToShareRoom,
+  emitEmergencyStatus,
   notifyTrustedContacts,
 };
 

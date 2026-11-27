@@ -1,4 +1,6 @@
 const Location = require('../models/Location');
+const LiveShareSession = require('../models/LiveShareSession');
+const { emitToUser, emitToShareRoom } = require('../services/notificationService');
 
 // Values are deliberately conservative for a personal-safety tracker and can
 // be adjusted here if the product needs to support aircraft or older GPS units.
@@ -119,6 +121,25 @@ const updateLocation = async (req,res) => {
             accuracy,
             recordedAt,
         });
+
+        const livePayload = {
+            latitude,
+            longitude,
+            speed,
+            accuracy,
+            recordedAt: recordedAt.toISOString(),
+        };
+        emitToUser(req.user.id, "location:updated", livePayload);
+
+        // Broadcast to any active live-share viewers and keep lastLocation fresh.
+        const activeShare = await LiveShareSession.findOneAndUpdate(
+            { user: req.user.id, status: "active", expiresAt: { $gt: new Date() } },
+            { $set: { lastLocation: livePayload } },
+            { new: true }
+        ).lean();
+        if (activeShare) {
+            emitToShareRoom(activeShare.shareToken, "live-share:location", livePayload);
+        }
 
         res.status(201).json({
             success: true,
