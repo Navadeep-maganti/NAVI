@@ -1,0 +1,70 @@
+const { getLocationRisk } = require("../services/mlService");
+const { learnBehaviorProfile } = require("../services/mlService");
+const Location = require("../models/Location");
+const BehaviorProfile = require("../models/BehaviorProfile");
+
+const predictLocationRisk = async (req, res) => {
+  const { latitude, longitude, accuracy, speed, timestamp } = req.body;
+
+  try {
+    const prediction = await getLocationRisk({
+      latitude,
+      longitude,
+      accuracy,
+      speed,
+      timestamp,
+    });
+
+    return res.status(200).json({ success: true, prediction });
+  } catch (error) {
+    // Invalid inference input is a client error; connectivity/service faults are upstream errors.
+    const status = error.status === 422 ? 400 : 502;
+    return res.status(status).json({
+      success: false,
+      message: status === 400 ? "Invalid location-risk request" : "ML service is unavailable",
+      error: error.message,
+    });
+  }
+};
+
+const learnMyBehaviorProfile = async (req, res) => {
+  const days = req.query.days === undefined ? 30 : Number(req.query.days);
+  if (!Number.isInteger(days) || days < 7 || days > 90) {
+    return res.status(400).json({ success: false, message: "days must be an integer from 7 to 90" });
+  }
+
+  try {
+    const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const history = await Location.find({ user: req.user.id, recordedAt: { $gte: from } })
+      .select("latitude longitude speed accuracy recordedAt")
+      .sort({ recordedAt: 1 })
+      .limit(10000)
+      .lean();
+    const result = await learnBehaviorProfile(history.map((point) => ({
+      latitude: point.latitude,
+      longitude: point.longitude,
+      speed: point.speed,
+      accuracy: point.accuracy,
+      timestamp: point.recordedAt.toISOString(),
+    })));
+
+    if (!result.isReady) {
+      return res.status(200).json({ success: true, profileReady: false, ...result });
+    }
+
+    const profile = await BehaviorProfile.findOneAndUpdate(
+      { user: req.user.id },
+      { user: req.user.id, learnedAt: new Date(), ...result },
+      { new: true, upsert: true, runValidators: true }
+    );
+    return res.status(200).json({ success: true, profileReady: true, profile });
+  } catch (error) {
+    return res.status(error.status === 422 ? 400 : 502).json({
+      success: false,
+      message: error.status === 422 ? "Invalid historical location data" : "Behavior learning service is unavailable",
+      error: error.message,
+    });
+  }
+};
+
+module.exports = { predictLocationRisk, learnMyBehaviorProfile };

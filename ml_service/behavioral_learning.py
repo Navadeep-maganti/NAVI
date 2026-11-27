@@ -1,0 +1,103 @@
+"""Individual behavioural-profile learning using spatial DBSCAN clustering."""
+
+from collections import Counter, defaultdict
+from datetime import datetime
+
+import numpy as np
+from sklearn.cluster import DBSCAN
+
+from feature_engineering import EARTH_RADIUS_METRES, LocationPoint
+
+
+DBSCAN_EPS_METRES = 100
+DBSCAN_MIN_SAMPLES = 5
+MIN_PROFILE_POINTS = 50
+MIN_PROFILE_SPAN_DAYS = 7
+MAX_ROUTE_GAP_SECONDS = 2 * 60 * 60
+
+
+def _top_values(counter: Counter, count: int = 3) -> list[int]:
+    return [int(value) for value, _ in counter.most_common(count)]
+
+
+def learn_behavior_profile(locations: list[LocationPoint]) -> dict:
+    """Find regular places with DBSCAN and learn repeat transitions and activity patterns."""
+    points = sorted(locations, key=lambda point: point.timestamp)
+    first_seen = points[0].timestamp
+    last_seen = points[-1].timestamp
+    span_days = (last_seen - first_seen).total_seconds() / 86_400
+    sufficiency = {
+        "minimumPoints": MIN_PROFILE_POINTS,
+        "observedPoints": len(points),
+        "minimumSpanDays": MIN_PROFILE_SPAN_DAYS,
+        "observedSpanDays": round(span_days, 2),
+    }
+
+    if len(points) < MIN_PROFILE_POINTS or span_days < MIN_PROFILE_SPAN_DAYS:
+        return {
+            "isReady": False,
+            "dataSufficiency": sufficiency,
+            "regularPlaces": [],
+            "routineRoutes": [],
+            "activityPatterns": {},
+        }
+
+    # DBSCAN with metric='haversine' expects [latitude, longitude] in radians.
+    coordinates = np.radians([[point.latitude, point.longitude] for point in points])
+    labels = DBSCAN(
+        eps=DBSCAN_EPS_METRES / EARTH_RADIUS_METRES,
+        min_samples=DBSCAN_MIN_SAMPLES,
+        metric="haversine",
+        algorithm="ball_tree",
+    ).fit_predict(coordinates)
+
+    clusters: dict[int, list[LocationPoint]] = defaultdict(list)
+    for point, label in zip(points, labels):
+        if label >= 0:  # DBSCAN uses -1 for noise, which is deliberately not a regular place.
+            clusters[int(label)].append(point)
+
+    regular_places = []
+    for label, cluster_points in sorted(clusters.items()):
+        hours = Counter(point.timestamp.hour for point in cluster_points)
+        weekdays = Counter(point.timestamp.weekday() for point in cluster_points)
+        regular_places.append(
+            {
+                "clusterId": label,
+                "latitude": float(np.mean([point.latitude for point in cluster_points])),
+                "longitude": float(np.mean([point.longitude for point in cluster_points])),
+                "visitCount": len(cluster_points),
+                "peakHours": _top_values(hours),
+                "peakWeekdays": _top_values(weekdays),
+            }
+        )
+
+    route_counts: Counter = Counter()
+    for index in range(1, len(points)):
+        previous_label = int(labels[index - 1])
+        current_label = int(labels[index])
+        elapsed = (points[index].timestamp - points[index - 1].timestamp).total_seconds()
+        if previous_label >= 0 and current_label >= 0 and previous_label != current_label and elapsed <= MAX_ROUTE_GAP_SECONDS:
+            route_counts[(previous_label, current_label)] += 1
+
+    routine_routes = [
+        {"fromClusterId": start, "toClusterId": end, "transitionCount": count}
+        for (start, end), count in route_counts.most_common()
+    ]
+
+    activity_patterns = {
+        "hourlyActivity": {str(hour): count for hour, count in sorted(Counter(point.timestamp.hour for point in points).items())},
+        "weekdayActivity": {str(day): count for day, count in sorted(Counter(point.timestamp.weekday() for point in points).items())},
+        "peakHours": _top_values(Counter(point.timestamp.hour for point in points)),
+        "peakWeekdays": _top_values(Counter(point.timestamp.weekday() for point in points)),
+    }
+
+    return {
+        "isReady": True,
+        "dataSufficiency": sufficiency,
+        "regularPlaces": regular_places,
+        "routineRoutes": routine_routes,
+        "activityPatterns": activity_patterns,
+        "learningConfig": {"algorithm": "DBSCAN", "epsMetres": DBSCAN_EPS_METRES, "minSamples": DBSCAN_MIN_SAMPLES},
+        "firstSeen": first_seen.isoformat(),
+        "lastSeen": last_seen.isoformat(),
+    }
