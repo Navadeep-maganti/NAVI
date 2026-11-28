@@ -31,11 +31,22 @@ const manualSOS = async (req, res) => {
 
 const respondToCheckin = async (req, res) => {
   try {
-    const { response } = req.body;
+    const { response, safeDurationMinutes } = req.body;
     if (!["safe", "need_help", "cancel"].includes(response)) {
       return res.status(400).json({
         success: false,
         message: "response must be one of: safe, need_help, cancel",
+      });
+    }
+    if (
+      safeDurationMinutes !== undefined &&
+      (!Number.isFinite(Number(safeDurationMinutes)) ||
+        Number(safeDurationMinutes) < 5 ||
+        Number(safeDurationMinutes) > 720)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "safeDurationMinutes must be between 5 and 720",
       });
     }
 
@@ -43,6 +54,7 @@ const respondToCheckin = async (req, res) => {
       userId: req.user.id,
       alertId: req.params.id,
       response,
+      safeDurationMinutes,
     });
     if (result.notFound) {
       return res.status(404).json({ success: false, message: "Alert not found" });

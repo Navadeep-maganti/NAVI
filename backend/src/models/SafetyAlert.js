@@ -66,6 +66,14 @@ const safetyAlertSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    cooldownUntil: {
+      type: Date,
+      default: null,
+    },
+    cooldownRadiusMetres: {
+      type: Number,
+      default: 300,
+    },
     notes: {
       type: String,
       trim: true,

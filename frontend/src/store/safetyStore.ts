@@ -131,7 +131,7 @@ interface SafetyState {
   stopLiveShare: () => Promise<void>;
   sendLocationAndAssess: (point: GeoPoint) => Promise<void>;
   triggerSOS: (notes?: string) => Promise<boolean>;
-  respondToCheckin: (response: "safe" | "need_help") => Promise<void>;
+  respondToCheckin: (response: "safe" | "need_help", safeDurationMinutes?: number) => Promise<void>;
 }
 
 export const useSafetyStore = create<SafetyState>((set, get) => ({
@@ -390,17 +390,20 @@ export const useSafetyStore = create<SafetyState>((set, get) => ({
     }
   },
 
-  respondToCheckin: async (response) => {
+  respondToCheckin: async (response, safeDurationMinutes) => {
     const pending = get().pendingCheckin;
     if (!pending) return;
     try {
-      await apiClient.post(`/api/alerts/${pending.alertId}/respond`, { response });
+      await apiClient.post(`/api/alerts/${pending.alertId}/respond`, {
+        response,
+        ...(response === "safe" && safeDurationMinutes ? { safeDurationMinutes } : {}),
+      });
       set({
         pendingCheckin: null,
         lastSosMessage:
           response === "need_help"
             ? "Emergency escalated to your trusted contacts."
-            : "Check-in confirmed safe.",
+            : `Check-in confirmed safe (paused here for ${safeDurationMinutes || 45}m).`,
       });
     } catch {
       set({ pendingCheckin: null });

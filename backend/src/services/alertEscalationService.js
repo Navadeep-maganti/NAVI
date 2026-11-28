@@ -4,6 +4,50 @@ const { emitToUser, emitEmergencyStatus, notifyTrustedContacts, sendPushToUser }
 
 const DEFAULT_CHECKIN_TIMEOUT_SECONDS = 120;
 const ESCALATED_COOLDOWN_MS = 30 * 60 * 1000;
+const DEFAULT_SAFE_COOLDOWN_MINUTES = 45;
+const DEFAULT_SAFE_PERIMETER_METRES = 300;
+const RISK_SPIKE_OVERRIDE_DELTA = 0.25;
+const EARTH_RADIUS_METRES = 6371000;
+
+const distanceMetres = (a, b) => {
+  if (
+    typeof a?.latitude !== "number" ||
+    typeof a?.longitude !== "number" ||
+    typeof b?.latitude !== "number" ||
+    typeof b?.longitude !== "number"
+  ) {
+    return Infinity;
+  }
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_METRES * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+};
+
+const isWithinSafeCooldown = ({ recentSafeAlert, currentLocation, decision, now = new Date() }) => {
+  if (!recentSafeAlert || !recentSafeAlert.cooldownUntil) return false;
+  if (now >= new Date(recentSafeAlert.cooldownUntil)) return false;
+
+  const radius = recentSafeAlert.cooldownRadiusMetres || DEFAULT_SAFE_PERIMETER_METRES;
+  const dist = distanceMetres(currentLocation, recentSafeAlert.location);
+  if (dist > radius) return false;
+
+  // Escape hatch: allow re-checking if risk spiked sharply since user tapped "I'm Safe".
+  const prevScore = recentSafeAlert.decisionSnapshot?.contextualRiskScore;
+  const currScore = decision?.contextualRiskScore;
+  if (
+    typeof prevScore === "number" &&
+    typeof currScore === "number" &&
+    currScore >= prevScore + RISK_SPIKE_OVERRIDE_DELTA
+  ) {
+    return false;
+  }
+
+  return true;
+};
 
 const shouldGenerateCheckin = (decision, hasRecentEscalation = false) =>
   !hasRecentEscalation &&
@@ -41,6 +85,18 @@ const createCheckinFromDecision = async ({ userId, currentLocation, decision }) 
   if (existingActive) {
     // Do not open a duplicate check-in while one is pending or an emergency is already escalated.
     return existingActive.status === "pending_checkin" ? existingActive : null;
+  }
+
+  const recentSafeAlert = await SafetyAlert.findOne({
+    user: userId,
+    status: "resolved_safe",
+    cooldownUntil: { $gt: now },
+  })
+    .sort({ respondedAt: -1 })
+    .lean();
+
+  if (isWithinSafeCooldown({ recentSafeAlert, currentLocation, decision, now })) {
+    return null;
   }
 
   const timeoutSec = resolveCheckinTimeoutSeconds(decision);
@@ -92,7 +148,7 @@ const createCheckinFromDecision = async ({ userId, currentLocation, decision }) 
   return alert;
 };
 
-const respondToAlert = async ({ userId, alertId, response }) => {
+const respondToAlert = async ({ userId, alertId, response, safeDurationMinutes }) => {
   const alert = await SafetyAlert.findOne({ _id: alertId, user: userId });
   if (!alert) return { notFound: true };
 
@@ -104,8 +160,16 @@ const respondToAlert = async ({ userId, alertId, response }) => {
   alert.respondedAt = now;
 
   if (response === "safe" || response === "cancel") {
+    const mins =
+      safeDurationMinutes !== undefined && Number.isFinite(Number(safeDurationMinutes))
+        ? Math.max(5, Math.min(720, Number(safeDurationMinutes)))
+        : DEFAULT_SAFE_COOLDOWN_MINUTES;
     alert.status = response === "safe" ? "resolved_safe" : "cancelled";
     alert.userResponse = "safe";
+    if (response === "safe") {
+      alert.cooldownUntil = new Date(now.getTime() + mins * 60 * 1000);
+      alert.cooldownRadiusMetres = DEFAULT_SAFE_PERIMETER_METRES;
+    }
     await alert.save();
     await emitEmergencyStatus(userId, {
       alertId: String(alert._id),
@@ -226,6 +290,7 @@ module.exports = {
   shouldGenerateCheckin,
   resolveCheckinTimeoutSeconds,
   evaluateTimeoutEscalation,
+  isWithinSafeCooldown,
   createCheckinFromDecision,
   respondToAlert,
   resolveEscalatedAlert,

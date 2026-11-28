@@ -4,6 +4,7 @@ const {
   shouldGenerateCheckin,
   resolveCheckinTimeoutSeconds,
   evaluateTimeoutEscalation,
+  isWithinSafeCooldown,
 } = require("../src/services/alertEscalationService");
 const { buildEmergencyEmail } = require("../src/services/notificationService");
 
@@ -59,5 +60,48 @@ test("buildEmergencyEmail includes user name, maps pin, and live tracking URL", 
   assert.match(email.text, /manual_sos/);
   assert.match(email.text, /maps\.google\.com\/\?q=12\.9716,77\.5946/);
   assert.match(email.html, /\/api\/live-share\/view\/abc123/);
+});
+
+test("isWithinSafeCooldown suppresses repeat checkins inside 300m until expired, left, or risk spikes", () => {
+  const now = new Date("2026-11-28T18:00:00.000Z");
+  const safeAlert = {
+    location: { latitude: 16.83334, longitude: 81.52774 },
+    cooldownUntil: new Date("2026-11-28T18:45:00.000Z"),
+    cooldownRadiusMetres: 300,
+    decisionSnapshot: { contextualRiskScore: 0.6 },
+  };
+
+  // Same spot, similar risk -> suppressed
+  assert.equal(
+    isWithinSafeCooldown({
+      recentSafeAlert: safeAlert,
+      currentLocation: { latitude: 16.8335, longitude: 81.5278 },
+      decision: { contextualRiskScore: 0.62 },
+      now,
+    }),
+    true
+  );
+
+  // Moved >300m away -> not suppressed
+  assert.equal(
+    isWithinSafeCooldown({
+      recentSafeAlert: safeAlert,
+      currentLocation: { latitude: 16.838, longitude: 81.5278 },
+      decision: { contextualRiskScore: 0.62 },
+      now,
+    }),
+    false
+  );
+
+  // Risk spiked by +0.25 -> not suppressed
+  assert.equal(
+    isWithinSafeCooldown({
+      recentSafeAlert: safeAlert,
+      currentLocation: { latitude: 16.8335, longitude: 81.5278 },
+      decision: { contextualRiskScore: 0.88 },
+      now,
+    }),
+    false
+  );
 });
 

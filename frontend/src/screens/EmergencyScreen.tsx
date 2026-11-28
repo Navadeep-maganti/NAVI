@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { apiClient } from "../config/api";
+import { CheckinPromptCard } from "../components/CheckinPromptCard";
 import { useSafetyStore } from "../store/safetyStore";
 import { colors } from "../theme/colors";
 
@@ -107,33 +108,13 @@ export const EmergencyScreen: React.FC = () => {
 
       {/* 1. Active Pending Check-In */}
       {pendingCheckin && (
-        <View style={styles.checkinCard}>
-          <Text style={styles.checkinTitle}>Pending Safety Check-In</Text>
-          <Text style={styles.checkinSub}>
-            Risk level: {pendingCheckin.contextualRiskLevel.toUpperCase()} • Respond before{" "}
-            {new Date(pendingCheckin.checkinDeadline).toLocaleTimeString()}
-          </Text>
-          <View style={styles.rowGap}>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: colors.success }]}
-              onPress={async () => {
-                await respondToCheckin("safe");
-                await loadAlerts();
-              }}
-            >
-              <Text style={styles.actionText}>I&apos;m Safe</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: colors.danger }]}
-              onPress={async () => {
-                await respondToCheckin("need_help");
-                await loadAlerts();
-              }}
-            >
-              <Text style={styles.actionText}>Need Help</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <CheckinPromptCard
+          checkin={pendingCheckin}
+          onRespond={async (resp, mins) => {
+            await respondToCheckin(resp, mins);
+            await loadAlerts();
+          }}
+        />
       )}
 
       {/* 2. Active Emergency Escalation & Contact Notification Status */}
