@@ -39,7 +39,7 @@ export const SafeSessionsScreen: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    refreshDashboard();
+    refreshDashboard(true);
     fetchHistory(hoursFilter);
   }, [hoursFilter]);
 

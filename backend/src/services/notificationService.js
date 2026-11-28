@@ -135,6 +135,8 @@ const notifyTrustedContacts = async ({ userId, alert }) => {
   const results = [];
 
   for (const contact of contacts) {
+    const canShareLive = contact.canViewLiveLocation !== false;
+    const contactLiveShareUrl = canShareLive ? liveShareUrl : null;
     const messagePayload = {
       alertId: String(alert._id),
       type: alert.type,
@@ -143,8 +145,8 @@ const notifyTrustedContacts = async ({ userId, alert }) => {
       contact: { id: String(contact._id), name: contact.name, phone: contact.phone, email: contact.email },
       location: alert.location || null,
       mapsUrl,
-      liveShareUrl,
-      shareToken: shareSession.shareToken,
+      liveShareUrl: contactLiveShareUrl,
+      shareToken: canShareLive ? shareSession.shareToken : null,
       notes: alert.notes || null,
       timestamp: new Date().toISOString(),
     };
@@ -159,7 +161,7 @@ const notifyTrustedContacts = async ({ userId, alert }) => {
           userName,
           triggerReason: alert.triggerReason,
           mapsUrl,
-          liveShareUrl,
+          liveShareUrl: contactLiveShareUrl,
           notes: alert.notes,
         });
         await transporter.sendMail({
@@ -262,6 +264,22 @@ const sendPushToUser = async ({ userId, title, body, data = {} }) => {
   return { sent: false, reason: "fcm_not_configured" };
 };
 
+const sendVerificationEmail = async ({ userId, contact, code }) => {
+  const transporter = createMailTransporter();
+  if (!transporter || !contact?.email) {
+    return { sent: false, channel: "dev_fallback" };
+  }
+  const user = await User.findById(userId).select("name").lean();
+  const userName = user?.name || "A NAVI User";
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: contact.email,
+    subject: `[NAVI] Verify your trusted contact status for ${userName}`,
+    text: `${userName} added you as a trusted emergency contact on NAVI.\nVerification code: ${code}\nThis code expires in 15 minutes.`,
+  });
+  return { sent: true, channel: "email" };
+};
+
 module.exports = {
   setSocketServer,
   emitToUser,
@@ -270,5 +288,6 @@ module.exports = {
   ensureEmergencyLiveShare,
   buildEmergencyEmail,
   notifyTrustedContacts,
+  sendVerificationEmail,
   sendPushToUser,
 };

@@ -43,6 +43,33 @@ const trustedContactSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+
+    canViewLiveLocation: {
+      type: Boolean,
+      default: true,
+    },
+
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    verifiedAt: {
+      type: Date,
+      default: null,
+    },
+
+    verificationCode: {
+      type: String,
+      default: null,
+      select: false,
+    },
+
+    verificationExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
   },
   { timestamps: true }
 );

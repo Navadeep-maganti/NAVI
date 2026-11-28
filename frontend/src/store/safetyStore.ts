@@ -122,7 +122,7 @@ interface SafetyState {
   setMonitoringPreset: (preset: MonitoringPreset) => void;
   connectSocket: (token: string) => void;
   disconnectSocket: () => void;
-  refreshDashboard: () => Promise<void>;
+  refreshDashboard: (silent?: boolean) => Promise<void>;
   fetchHistory: (hours?: number) => Promise<void>;
   fetchNearbyZones: (latitude: number, longitude: number) => Promise<void>;
   startSafeSession: (payload: { activityType: string; label?: string; durationMinutes: number }) => Promise<boolean>;
@@ -187,8 +187,8 @@ export const useSafetyStore = create<SafetyState>((set, get) => ({
     set({ socket: null, socketConnected: false });
   },
 
-  refreshDashboard: async () => {
-    set({ refreshing: true });
+  refreshDashboard: async (silent = false) => {
+    if (!silent) set({ refreshing: true });
     try {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
@@ -357,7 +357,7 @@ export const useSafetyStore = create<SafetyState>((set, get) => ({
           : get().pendingCheckin,
       });
       await Promise.all([
-        get().refreshDashboard(),
+        get().refreshDashboard(true),
         get().fetchNearbyZones(point.latitude, point.longitude),
       ]);
     } catch {

@@ -13,6 +13,7 @@ import { NotificationPermissionScreen } from "../screens/NotificationPermissionS
 import { HomeScreen } from "../screens/HomeScreen";
 import { LiveMapScreen } from "../screens/LiveMapScreen";
 import { SafeSessionsScreen } from "../screens/SafeSessionsScreen";
+import { TrustedContactsScreen } from "../screens/TrustedContactsScreen";
 import { colors } from "../theme/colors";
 import { AuthStackParamList, MainTabParamList, OnboardingStackParamList } from "./types";
 
@@ -58,7 +59,8 @@ export const RootNavigator: React.FC = () => {
         >
           <MainTabs.Screen name="Dashboard" component={HomeScreen} options={{ tabBarLabel: "Dashboard" }} />
           <MainTabs.Screen name="LiveMap" component={LiveMapScreen} options={{ tabBarLabel: "Live Map" }} />
-          <MainTabs.Screen name="Sessions" component={SafeSessionsScreen} options={{ tabBarLabel: "Sessions & History" }} />
+          <MainTabs.Screen name="Sessions" component={SafeSessionsScreen} options={{ tabBarLabel: "Sessions" }} />
+          <MainTabs.Screen name="Contacts" component={TrustedContactsScreen} options={{ tabBarLabel: "Contacts" }} />
         </MainTabs.Navigator>
       )}
     </NavigationContainer>

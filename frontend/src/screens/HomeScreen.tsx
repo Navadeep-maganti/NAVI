@@ -54,7 +54,7 @@ export const HomeScreen: React.FC = () => {
 
   useEffect(() => {
     if (token) connectSocket(token);
-    refreshDashboard();
+    refreshDashboard(true);
     fetchCurrentLocation().then((loc) => {
       if (loc) sendLocationAndAssess(loc);
     });

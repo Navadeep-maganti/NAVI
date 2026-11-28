@@ -14,4 +14,5 @@ export type MainTabParamList = {
   Dashboard: undefined;
   LiveMap: undefined;
   Sessions: undefined;
+  Contacts: undefined;
 };

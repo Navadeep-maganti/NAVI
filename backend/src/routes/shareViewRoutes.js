@@ -7,8 +7,9 @@ const escapeHtml = (str) =>
 
 router.get("/:token", (req, res) => {
   const token = escapeHtml(req.params.token);
-  // Allow Leaflet CDN + Socket.IO client script on this standalone viewer page.
+  // Allow Leaflet CDN + Socket.IO client script and tile Referer on this standalone viewer page.
   res.removeHeader("Content-Security-Policy");
+  res.setHeader("Referrer-Policy", "origin");
   res.type("html").send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -39,13 +40,18 @@ router.get("/:token", (req, res) => {
   <script>
     const token = "${token}";
     const map = L.map("map").setView([20, 0], 2);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap contributors"
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+      attribution: "Tiles &copy; Esri",
+      maxZoom: 19
     }).addTo(map);
     let marker = null;
 
     function updatePosition(loc, name) {
-      if (!loc || typeof loc.latitude !== "number") return;
+      if (!loc || typeof loc.latitude !== "number") {
+        document.getElementById("details").textContent =
+          (name ? name + " • " : "") + "Connected — waiting for next live GPS update...";
+        return;
+      }
       const latlng = [loc.latitude, loc.longitude];
       if (!marker) {
         marker = L.marker(latlng).addTo(map);
@@ -54,11 +60,13 @@ router.get("/:token", (req, res) => {
         marker.setLatLng(latlng);
         map.panTo(latlng);
       }
-      document.getElementById("details").textContent =
-        (name ? name + " • " : "") +
-        "Lat: " + loc.latitude.toFixed(5) + ", Lon: " + loc.longitude.toFixed(5) +
-        (loc.speed != null ? " • Speed: " + loc.speed + " m/s" : "") +
-        (loc.recordedAt ? " • Updated: " + new Date(loc.recordedAt).toLocaleTimeString() : "");
+      const mapsUrl = "https://maps.google.com/?q=" + loc.latitude + "," + loc.longitude;
+      document.getElementById("details").innerHTML =
+        (name ? "<strong>" + name + "</strong> • " : "") +
+        loc.latitude.toFixed(5) + ", " + loc.longitude.toFixed(5) +
+        (loc.speed != null ? " • " + (loc.speed * 3.6).toFixed(1) + " km/h" : "") +
+        (loc.recordedAt ? " • " + new Date(loc.recordedAt).toLocaleTimeString() : "") +
+        ' • <a href="' + mapsUrl + '" target="_blank" style="color:#38bdf8;">Open in Maps</a>';
     }
 
     fetch("/api/live-share/view/" + encodeURIComponent(token))
