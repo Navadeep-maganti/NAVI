@@ -34,6 +34,17 @@ const userSchema = new mongoose.Schema(
             min: 7,
             max: 90,
         },
+
+        fcmToken: {
+            type: String,
+            default: null,
+        },
+
+        pushPlatform: {
+            type: String,
+            enum: ["android", "ios", null],
+            default: null,
+        },
     },
     {
         timestamps: true,

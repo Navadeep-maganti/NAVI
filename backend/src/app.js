@@ -21,6 +21,7 @@ const safeSessionRoutes = require("./routes/safeSessionRoutes");
 const alertRoutes = require("./routes/alertRoutes");
 const liveShareRoutes = require("./routes/liveShareRoutes");
 const privacyRoutes = require("./routes/privacyRoutes");
+const shareViewRoutes = require("./routes/shareViewRoutes");
 const { initSocketServer } = require("./services/socketService");
 const { processExpiredCheckins } = require("./services/alertEscalationService");
 const { runPeriodicReclustering } = require("./services/adaptiveLearningService");
@@ -66,6 +67,7 @@ app.use("/api/safe-sessions", safeSessionRoutes);
 app.use("/api/alerts", alertRoutes);
 app.use("/api/live-share", liveShareRoutes);
 app.use("/api/privacy", privacyRoutes);
+app.use("/share", shareViewRoutes);
 
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && "body" in err) {

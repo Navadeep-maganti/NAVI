@@ -128,7 +128,7 @@ const notifyTrustedContacts = async ({ userId, alert }) => {
       : null;
 
   const baseUrl = (process.env.PUBLIC_APP_URL || `http://localhost:${process.env.PORT || 5000}`).replace(/\/$/, "");
-  const liveShareUrl = `${baseUrl}/api/live-share/view/${shareSession.shareToken}`;
+  const liveShareUrl = `${baseUrl}/share/${shareSession.shareToken}`;
   const userName = user?.name || "NAVI User";
   const transporter = createMailTransporter();
   const webhookUrl = process.env.ALERT_WEBHOOK_URL;
@@ -219,6 +219,49 @@ const notifyTrustedContacts = async ({ userId, alert }) => {
   return results;
 };
 
+const sendPushToUser = async ({ userId, title, body, data = {} }) => {
+  const user = await User.findById(userId).select("fcmToken").lean();
+  if (!user?.fcmToken) return { sent: false, reason: "no_fcm_token" };
+
+  // Support optional firebase-admin when installed & configured, or an external FCM relay webhook.
+  let firebaseAdmin = null;
+  try {
+    firebaseAdmin = require("firebase-admin");
+  } catch {
+    firebaseAdmin = null;
+  }
+
+  if (firebaseAdmin && firebaseAdmin.apps?.length > 0) {
+    try {
+      await firebaseAdmin.messaging().send({
+        token: user.fcmToken,
+        notification: { title, body },
+        data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default", contentAvailable: true } } },
+      });
+      return { sent: true, channel: "firebase_admin" };
+    } catch (error) {
+      return { sent: false, reason: error.message };
+    }
+  }
+
+  if (process.env.FCM_WEBHOOK_URL) {
+    try {
+      await axios.post(
+        process.env.FCM_WEBHOOK_URL,
+        { token: user.fcmToken, title, body, data },
+        { timeout: 5000 }
+      );
+      return { sent: true, channel: "fcm_webhook" };
+    } catch (error) {
+      return { sent: false, reason: error.message };
+    }
+  }
+
+  return { sent: false, reason: "fcm_not_configured" };
+};
+
 module.exports = {
   setSocketServer,
   emitToUser,
@@ -227,4 +270,5 @@ module.exports = {
   ensureEmergencyLiveShare,
   buildEmergencyEmail,
   notifyTrustedContacts,
+  sendPushToUser,
 };

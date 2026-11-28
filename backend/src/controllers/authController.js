@@ -83,7 +83,38 @@ const loginUser = async (req,res) => {
     }
 };
 
+const registerDeviceToken = async (req, res) => {
+    try {
+        const { fcmToken, platform } = req.body;
+        if (typeof fcmToken !== "string" || !fcmToken.trim()) {
+            return res.status(400).json({ success: false, message: "fcmToken is required" });
+        }
+        if (platform !== undefined && !["android", "ios"].includes(platform)) {
+            return res.status(400).json({ success: false, message: "platform must be android or ios" });
+        }
+
+        await User.findByIdAndUpdate(req.user.id, {
+            fcmToken: fcmToken.trim(),
+            pushPlatform: platform || null,
+        });
+        return res.status(200).json({ success: true, message: "Device push token registered" });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const clearDeviceToken = async (req, res) => {
+    try {
+        await User.findByIdAndUpdate(req.user.id, { fcmToken: null, pushPlatform: null });
+        return res.status(200).json({ success: true, message: "Device push token cleared" });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     registerUser,
     loginUser,
-}
+    registerDeviceToken,
+    clearDeviceToken,
+};

@@ -1,6 +1,6 @@
 const SafetyAlert = require("../models/SafetyAlert");
 const Preference = require("../models/Preference");
-const { emitToUser, emitEmergencyStatus, notifyTrustedContacts } = require("./notificationService");
+const { emitToUser, emitEmergencyStatus, notifyTrustedContacts, sendPushToUser } = require("./notificationService");
 
 const DEFAULT_CHECKIN_TIMEOUT_SECONDS = 120;
 
@@ -65,6 +65,16 @@ const createCheckinFromDecision = async ({ userId, currentLocation, decision }) 
     contextualRiskLevel: decision.contextualRiskLevel,
     recommendedAction: decision.recommendedAction,
     checkinDeadline: alert.checkinDeadline.toISOString(),
+  });
+  await sendPushToUser({
+    userId,
+    title: "NAVI Safety Check-In",
+    body: "Unusual activity detected. Tap to confirm you are safe.",
+    data: {
+      type: "checkin_prompt",
+      alertId: String(alert._id),
+      riskLevel: decision.contextualRiskLevel,
+    },
   });
   await emitEmergencyStatus(userId, {
     alertId: String(alert._id),
