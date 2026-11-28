@@ -53,10 +53,13 @@ def _nearest_place(point: LocationPoint, places: list[RegularPlace]) -> tuple[Re
     return place, _place_distance(point, place)
 
 
+MAX_FAMILIAR_RADIUS_METRES = 250.0
+
+
 def _place_radius(place: RegularPlace) -> float:
     boundary = place.boundary or {}
-    radius = boundary.get("maxRadiusMetres", boundary.get("radius95Metres", 100))
-    return max(float(radius), 100.0)
+    radius = boundary.get("radius95Metres", boundary.get("maxRadiusMetres", 100))
+    return max(100.0, min(float(radius), MAX_FAMILIAR_RADIUS_METRES))
 
 
 def _cluster_id_if_familiar(point: LocationPoint, places: list[RegularPlace]) -> int | None:
