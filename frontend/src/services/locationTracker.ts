@@ -1,6 +1,7 @@
 import * as Location from "expo-location";
 import { GeoPoint, MonitoringPreset } from "../store/safetyStore";
 import { getTimezoneOffsetMinutes, toLocalIsoString } from "../utils/time";
+import { NAVI_BACKGROUND_LOCATION_TASK } from "./backgroundLocationTask";
 
 let activeSubscription: Location.LocationSubscription | null = null;
 
@@ -45,9 +46,11 @@ export const startForegroundMonitoring = async (
   }
 
   const cfg = PRESET_CONFIG[preset];
+  const accuracy = preset === "high" ? Location.Accuracy.High : Location.Accuracy.Balanced;
+
   activeSubscription = await Location.watchPositionAsync(
     {
-      accuracy: preset === "high" ? Location.Accuracy.High : Location.Accuracy.Balanced,
+      accuracy,
       timeInterval: cfg.timeInterval,
       distanceInterval: cfg.distanceInterval,
     },
@@ -55,12 +58,41 @@ export const startForegroundMonitoring = async (
       onLocation(toGeoPoint(loc));
     }
   );
+
+  // Also enable OS background tracking when background permission is granted (Expo Dev Build).
+  try {
+    const bgPerm = await Location.getBackgroundPermissionsAsync();
+    if (bgPerm.status === "granted") {
+      await Location.startLocationUpdatesAsync(NAVI_BACKGROUND_LOCATION_TASK, {
+        accuracy,
+        timeInterval: cfg.timeInterval,
+        distanceInterval: cfg.distanceInterval,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: "NAVI Protection Active",
+          notificationBody: "Monitoring your route safety in the background.",
+          notificationColor: "#38BDF8",
+        },
+      });
+    }
+  } catch {
+    // Graceful fallback to foreground-only in Expo Go / simulators without background service.
+  }
+
   return true;
 };
 
-export const stopForegroundMonitoring = () => {
+export const stopForegroundMonitoring = async () => {
   if (activeSubscription) {
     activeSubscription.remove();
     activeSubscription = null;
+  }
+  try {
+    const started = await Location.hasStartedLocationUpdatesAsync(NAVI_BACKGROUND_LOCATION_TASK);
+    if (started) {
+      await Location.stopLocationUpdatesAsync(NAVI_BACKGROUND_LOCATION_TASK);
+    }
+  } catch {
+    // Ignore when background task is unavailable.
   }
 };
