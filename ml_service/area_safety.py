@@ -113,16 +113,58 @@ def score_environmental_risk(current: LocationPoint, zones: list[AreaZoneInput])
     }
 
 
+STILLNESS_RADIUS_METRES = 30.0
+STILLNESS_MIN_MINUTES = 15.0
+
+
+def _detect_unexpected_stillness(
+    current: LocationPoint,
+    recent: list[LocationPoint],
+    env_score: float,
+    location_signal: float,
+    is_night: bool,
+    has_profile: bool,
+) -> dict:
+    """Flag prolonged stillness (>=15m within 30m) only in unfamiliar, elevated-risk areas."""
+    unfamiliar = (location_signal >= 0.4) if has_profile else True
+    risky_context = env_score >= 0.45 or (is_night and env_score >= 0.35)
+    if not (unfamiliar and risky_context and recent):
+        return {"detected": False, "stationaryMinutes": 0.0, "score": 0.0}
+
+    ordered = sorted([*recent, current], key=lambda p: p.timestamp)
+    earliest_still = current.timestamp
+    for point in reversed(ordered[:-1]):
+        if distance_metres(point, current) <= STILLNESS_RADIUS_METRES:
+            earliest_still = point.timestamp
+        else:
+            break
+
+    stationary_minutes = max(0.0, (current.timestamp - earliest_still).total_seconds() / 60.0)
+    if stationary_minutes < STILLNESS_MIN_MINUTES:
+        return {"detected": False, "stationaryMinutes": round(stationary_minutes, 1), "score": 0.0}
+
+    score = _clamp(0.5 + (stationary_minutes - STILLNESS_MIN_MINUTES) / 30.0)
+    return {"detected": True, "stationaryMinutes": round(stationary_minutes, 1), "score": score}
+
+
 def assess_area_safety(request: AreaSafetyRequest) -> dict:
     env = score_environmental_risk(request.currentLocation, request.areaZones)
     env_score = env["score"]
+    is_night = env["timeContext"]["isNight"]
 
     if request.profile is None:
+        stillness = _detect_unexpected_stillness(
+            request.currentLocation, request.recentLocations, env_score, 1.0, is_night, False
+        )
+        overall = _clamp(env_score + (0.2 * stillness["score"] if stillness["detected"] else 0.0))
+        if stillness["detected"]:
+            env["factors"] = sorted(set(env["factors"]) | {"unexpected_stillness"})
         return {
-            "overallSafetyRisk": env_score,
-            "riskLevel": _risk_level(env_score),
+            "overallSafetyRisk": overall,
+            "riskLevel": _risk_level(overall),
             "environmentalRisk": env,
             "behavioralRisk": None,
+            "unexpectedStillness": stillness,
             "hasPersonalProfile": False,
             "modelVersion": "area-safety-v1",
         }
@@ -139,6 +181,11 @@ def assess_area_safety(request: AreaSafetyRequest) -> dict:
         (s["score"] for s in behavioral.get("signals", []) if s["type"] == "unusualLocation"),
         0.0,
     )
+    stillness = _detect_unexpected_stillness(
+        request.currentLocation, request.recentLocations, env_score, location_signal, is_night, True
+    )
+    if stillness["detected"]:
+        env["factors"] = sorted(set(env["factors"]) | {"unexpected_stillness"})
 
     combined = 0.55 * env_score + 0.45 * beh_score
     if location_signal > 0.3 and env_score >= 0.4:
@@ -146,12 +193,16 @@ def assess_area_safety(request: AreaSafetyRequest) -> dict:
     elif location_signal == 0.0 and beh_score < 0.25:
         combined *= 0.85
 
+    if stillness["detected"]:
+        combined += 0.2 * stillness["score"]
+
     overall = _clamp(combined)
     return {
         "overallSafetyRisk": overall,
         "riskLevel": _risk_level(overall),
         "environmentalRisk": env,
         "behavioralRisk": behavioral,
+        "unexpectedStillness": stillness,
         "hasPersonalProfile": True,
         "modelVersion": "area-safety-v1",
     }

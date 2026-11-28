@@ -10,7 +10,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+]
 
 
 def fetch_overpass(lat: float, lon: float, radius: int) -> dict:
@@ -24,9 +27,20 @@ def fetch_overpass(lat: float, lon: float, radius: int) -> dict:
     out center 150;
     """
     data = urllib.parse.urlencode({"data": query}).encode("utf-8")
-    req = urllib.request.Request(OVERPASS_URL, data=data, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    headers = {
+        "User-Agent": "NAVI-SafetyApp/1.0 (+https://github.com/navi-safety)",
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    last_err: Exception | None = None
+    for url in OVERPASS_URLS:
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception as err:
+            last_err = err
+    raise RuntimeError(f"Overpass API request failed: {last_err}")
 
 
 def osm_to_zones(osm_data: dict) -> list[dict]:

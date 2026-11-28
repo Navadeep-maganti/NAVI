@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Switc
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CheckinPromptCard } from "../components/CheckinPromptCard";
+import { SosCountdownModal } from "../components/SosCountdownModal";
 import { MainStackParamList } from "../navigation/types";
 import { fetchCurrentLocation, startForegroundMonitoring, stopForegroundMonitoring } from "../services/locationTracker";
 import { useAuthStore } from "../store/authStore";
@@ -22,7 +23,8 @@ export const HomeScreen: React.FC = () => {
   useEffect(() => { if (token) connectSocket(token); refreshDashboard(true); fetchCurrentLocation().then((loc) => loc && sendLocationAndAssess(loc)); return () => { stopForegroundMonitoring(); disconnectSocket(); }; }, [token]);
   const handleToggleMonitoring = async (next: boolean) => { if (next) { const started = await startForegroundMonitoring((pt) => sendLocationAndAssess(pt)); if (!started) return Alert.alert("Location Permission Needed", "Enable location access in Settings to start live monitoring."); setMonitoring(true); } else { stopForegroundMonitoring(); setMonitoring(false); } };
   const handleRefreshNow = async () => { const loc = await fetchCurrentLocation(); if (loc) await sendLocationAndAssess(loc); else await refreshDashboard(); };
-  const handlePressSOS = () => Alert.alert("Trigger Emergency SOS?", "This will immediately notify your trusted contacts with your location and start a live-tracking link.", [{ text: "Cancel", style: "cancel" }, { text: "Send SOS", style: "destructive", onPress: () => triggerSOS("Manual SOS from NAVI Dashboard") }]);
+  const [sosModalVisible, setSosModalVisible] = React.useState(false);
+  const handlePressSOS = () => setSosModalVisible(true);
   const riskLevel = safetyStatus?.contextualRiskLevel || "low"; const riskColor = RISK_COLORS[riskLevel] || colors.primary; const riskScore = safetyStatus ? Math.round(safetyStatus.contextualRiskScore * 100) : null;
   return <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefreshNow} tintColor={colors.primary} />}>
     <View style={styles.header}><View><Text style={styles.eyebrow}>NAVI • PERSONAL SAFETY</Text><Text style={styles.greeting}>Good to see you, {user?.name?.split(" ")[0] || "there"}.</Text></View><TouchableOpacity accessibilityLabel="Open settings" style={styles.settingsButton} onPress={() => navigation.navigate("Settings")}><AppIcon name="settings" active /></TouchableOpacity></View>
@@ -34,6 +36,7 @@ export const HomeScreen: React.FC = () => {
     <View style={styles.summaryHeader}><Text style={styles.summaryTitle}>Today at a glance</Text><TouchableOpacity onPress={handleRefreshNow}><Text style={styles.refreshText}>Refresh</Text></TouchableOpacity></View><View style={styles.statsRow}><Stat value={formatDistance(todaySummary.distanceMetres)} label="Distance" /><Stat value={String(todaySummary.pointsCount)} label="Checkpoints" /><Stat value={`${(todaySummary.maxSpeedMps * 3.6).toFixed(0)}`} label="Max km/h" /></View>
     <TouchableOpacity style={styles.locationCard} onPress={handleRefreshNow}><View style={styles.locationIcon}><AppIcon name="location" active /></View><View style={{ flex: 1 }}><Text style={styles.locationTitle}>Current location</Text><Text style={styles.bodyText}>{currentLocation ? `${currentLocation.latitude.toFixed(4)}, ${currentLocation.longitude.toFixed(4)} • ±${Math.round(currentLocation.accuracy)}m` : "Waiting for a GPS fix"}</Text></View><AppIcon name="arrow" /></TouchableOpacity>
     <TouchableOpacity style={[styles.sosButton, sosLoading && { opacity: .7 }]} onPress={handlePressSOS} disabled={sosLoading}>{sosLoading ? <ActivityIndicator color={colors.white} /> : <><View style={styles.sosIcon}><Text style={styles.sosIconText}>!</Text></View><View><Text style={styles.sosTitle}>Emergency SOS</Text><Text style={styles.sosSub}>Alert contacts and share live location</Text></View><Text style={styles.sosArrow}>›</Text></>}</TouchableOpacity>
+    <SosCountdownModal visible={sosModalVisible} onCancel={() => setSosModalVisible(false)} onConfirm={() => { setSosModalVisible(false); triggerSOS("Manual SOS from NAVI Dashboard"); }} />
   </ScrollView>;
 };
 const Stat = ({ value, label }: { value: string; label: string }) => <View style={styles.stat}><Text style={styles.statValue}>{value}</Text><Text style={styles.statLabel}>{label}</Text></View>;

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { apiClient } from "../config/api";
 import { CheckinPromptCard } from "../components/CheckinPromptCard";
+import { SosCountdownModal } from "../components/SosCountdownModal";
 import { useSafetyStore } from "../store/safetyStore";
 import { colors } from "../theme/colors";
 
@@ -49,6 +50,7 @@ export const EmergencyScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sosNote, setSosNote] = useState("");
+  const [sosModalVisible, setSosModalVisible] = useState(false);
 
   const loadAlerts = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -65,23 +67,13 @@ export const EmergencyScreen: React.FC = () => {
     loadAlerts();
   }, []);
 
-  const handleSOS = () => {
-    Alert.alert(
-      "Activate Emergency SOS?",
-      "This will immediately notify your trusted contacts and start a live location share.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Send SOS",
-          style: "destructive",
-          onPress: async () => {
-            await triggerSOS(sosNote.trim() || "Manual SOS from Alerts tab");
-            setSosNote("");
-            await loadAlerts();
-          },
-        },
-      ]
-    );
+  const handleSOS = () => setSosModalVisible(true);
+
+  const confirmSOS = async () => {
+    setSosModalVisible(false);
+    await triggerSOS(sosNote.trim() || "Manual SOS from Alerts tab");
+    setSosNote("");
+    await loadAlerts();
   };
 
   const handleResolve = async (alertId: string) => {
@@ -228,6 +220,11 @@ export const EmergencyScreen: React.FC = () => {
           </View>
         ))
       )}
+      <SosCountdownModal
+        visible={sosModalVisible}
+        onCancel={() => setSosModalVisible(false)}
+        onConfirm={confirmSOS}
+      />
     </ScrollView>
   );
 };

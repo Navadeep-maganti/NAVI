@@ -1,7 +1,16 @@
 const crypto = require("crypto");
 const AreaRisk = require("../models/AreaRisk");
 
+const DEFAULT_CROWD_EXPIRY_DAYS = 30;
 const isFiniteNumber = (value) => typeof value === "number" && Number.isFinite(value);
+
+const resolveCrowdExpiry = (expiresAt, now = new Date()) => {
+  if (expiresAt !== undefined && expiresAt !== null && expiresAt !== "") {
+    const parsed = new Date(expiresAt);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date(now.getTime() + DEFAULT_CROWD_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+};
 
 const requireAdminKey = (req, res, next) => {
   const configuredKey = process.env.ADMIN_API_KEY;
@@ -105,7 +114,8 @@ const upsertAreaRisk = async (req, res) => {
       if (Array.isArray(riskFactors) && riskFactors.length > 0) {
         existing.riskFactors = Array.from(new Set([...existing.riskFactors, ...riskFactors]));
       }
-      if (expiresAt !== undefined) existing.expiresAt = expiresAt ? new Date(expiresAt) : null;
+      // Refresh 30-day TTL whenever a crowd report is corroborated.
+      existing.expiresAt = resolveCrowdExpiry(expiresAt, now);
       await existing.save();
       return res.status(200).json({ success: true, merged: true, areaRisk: existing });
     }
@@ -122,7 +132,7 @@ const upsertAreaRisk = async (req, res) => {
       reportCount: 1,
       reportedBy: req.user.id,
       reporters: [req.user.id],
-      expiresAt: expiresAt ? new Date(expiresAt) : null,
+      expiresAt: resolveCrowdExpiry(expiresAt, now),
     });
 
     return res.status(201).json({ success: true, merged: false, areaRisk: created });
@@ -249,6 +259,7 @@ const updateAreaRisk = async (req, res) => {
 
 module.exports = {
   requireAdminKey,
+  resolveCrowdExpiry,
   findActiveAreaZones,
   upsertAreaRisk,
   upsertOfficialAreaRisk,

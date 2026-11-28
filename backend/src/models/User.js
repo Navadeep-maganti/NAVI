@@ -53,6 +53,12 @@ const userSchema = new mongoose.Schema(
             lastPromptedAt: { type: Date, default: null },
             dismissedUntil: { type: Date, default: null },
             temporaryProfile: { type: mongoose.Schema.Types.Mixed, default: null },
+            completedTripWindows: [
+                {
+                    start: { type: Date, required: true },
+                    end: { type: Date, required: true },
+                },
+            ],
         },
     },
     {

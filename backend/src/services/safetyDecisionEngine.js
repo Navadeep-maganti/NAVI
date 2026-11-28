@@ -22,7 +22,6 @@ const SIGNAL_WEIGHTS = {
   unusualLocation: 0.35,
   unusualTravelTime: 0.2,
   unusualRoute: 0.25,
-  abnormalMovement: 0.2,
 };
 
 const adjustBehavioralScore = (
@@ -36,12 +35,12 @@ const adjustBehavioralScore = (
 
   const suppressedSignals = [];
   const signals = behavioralRisk.signals || [];
-  const abnormalMovementScore =
-    signals.find((s) => s.type === "abnormalMovement")?.score ?? 0;
   let weightedSum = 0;
   let totalWeight = 0;
 
   for (const signal of signals) {
+    // Speed is excluded from risk analysis since normal travel modes vary widely.
+    if (signal.type === "abnormalMovement") continue;
     const weight = SIGNAL_WEIGHTS[signal.type] ?? 0.2;
     let score = signal.score ?? 0;
 
@@ -57,22 +56,14 @@ const adjustBehavioralScore = (
     ) {
       score = 0;
       suppressedSignals.push("unusualLocation");
-    } else if (signal.type === "unusualLocation" && isDaytime && abnormalMovementScore < 0.3) {
-      // Daytime errands in new places with normal speed are far less likely to be emergencies.
+    } else if (signal.type === "unusualLocation" && isDaytime) {
+      // Daytime errands in new places are far less likely to be emergencies.
       score *= 0.75;
       suppressedSignals.push("daytimeLocationDampened");
     }
     if (signal.type === "unusualTravelTime" && activeSession?.suppressTimeAlerts) {
       score = 0;
       suppressedSignals.push("unusualTravelTime");
-    }
-    if (
-      signal.type === "abnormalMovement" &&
-      activeSession?.expectedMaxSpeedMps != null &&
-      currentLocation.speed <= activeSession.expectedMaxSpeedMps
-    ) {
-      score = 0;
-      suppressedSignals.push("abnormalMovement");
     }
 
     weightedSum += score * weight;
@@ -149,6 +140,18 @@ const evaluateSafetyDecision = ({
   if (corroborated) {
     contextualScore = clamp01(contextualScore + 0.08);
     contextAdjustments.push("corroborated_env_and_behavior");
+  }
+
+  // Incorporate unexpected stillness in unfamiliar high-risk areas unless suppressed by an active SafeSession or roaming Travel Mode.
+  const stillness = assessment?.unexpectedStillness;
+  if (
+    stillness?.detected &&
+    !activeSession?.suppressLocationAlerts &&
+    !suppressedSignals.includes("withinDeclaredSessionAnchor") &&
+    !travelRoaming
+  ) {
+    contextualScore = clamp01(contextualScore + 0.2 * (stillness.score || 0.5));
+    contextAdjustments.push("unexpected_stillness");
   }
 
   let contextualRiskLevel = "low";

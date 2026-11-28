@@ -116,15 +116,6 @@ def detect_behavior_anomaly(request: AnomalyRequest) -> dict:
             "knownTransitionCount": matching_route.transitionCount if matching_route else 0,
         }))
 
-    # 4. Movement novelty: compare the observed speed with the user's learned 95th percentile.
-    speed95 = float((profile.movementBaseline or {}).get("speed95Mps", 0))
-    if isfinite(speed95) and speed95 > 0:
-        movement_score = _clamp((current.speed - speed95) / speed95)
-        weighted_signals.append(("abnormalMovement", movement_score, 0.2, {
-            "currentSpeedMps": current.speed,
-            "normalSpeed95Mps": speed95,
-        }))
-
     total_weight = sum(weight for _, _, weight, _ in weighted_signals)
     deviation_score = _clamp(
         sum(score * weight for _, score, weight, _ in weighted_signals) / total_weight

@@ -75,7 +75,6 @@ test("active safe session (jogging / night_shift) suppresses expected signals to
 
   assert.equal(result.adjustedBehavioralScore, 0);
   assert.deepEqual(result.suppressedSignals.sort(), [
-    "abnormalMovement",
     "unusualLocation",
     "unusualTravelTime",
   ]);
@@ -131,5 +130,31 @@ test("daytime unfamiliar location with normal movement is dampened compared to l
   assert.ok(dayRes.suppressedSignals.includes("daytimeLocationDampened"));
   assert.ok(dayRes.adjustedBehavioralScore < nightRes.adjustedBehavioralScore);
   assert.ok(dayRes.contextualRiskScore < nightRes.contextualRiskScore);
+});
+
+test("unexpectedStillness boosts risk unless suppressed by an active SafeSession", () => {
+  const assessment = {
+    environmentalRisk: { score: 0.5, timeContext: { hour: 23, isNight: true }, matchedZones: [{ id: "z1" }] },
+    behavioralRisk: {
+      deviationScore: 0.6,
+      signals: [{ type: "unusualLocation", score: 0.8 }],
+    },
+    unexpectedStillness: { detected: true, stationaryMinutes: 20, score: 0.67 },
+  };
+
+  const withoutSession = evaluateSafetyDecision({
+    assessment,
+    currentLocation: baseLocation,
+  });
+  assert.ok(withoutSession.contextAdjustments.includes("unexpected_stillness"));
+  assert.equal(withoutSession.contextualRiskLevel, "critical");
+
+  const withSession = evaluateSafetyDecision({
+    assessment,
+    currentLocation: baseLocation,
+    activeSession: { id: "s1", activityType: "social_event", suppressLocationAlerts: true },
+  });
+  assert.ok(!withSession.contextAdjustments.includes("unexpected_stillness"));
+  assert.ok(withSession.contextualRiskScore < withoutSession.contextualRiskScore);
 });
 

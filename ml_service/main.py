@@ -93,9 +93,6 @@ def predict_location_risk(location: LocationRiskRequest) -> LocationRiskResponse
     if location.accuracy > 50:
         score += 0.15
         reasons.append("low_gps_confidence")
-    if location.speed >= 25:
-        score += 0.25
-        reasons.append("high_travel_speed")
 
     hour = location.timestamp.hour
     if hour >= 22 or hour < 5:

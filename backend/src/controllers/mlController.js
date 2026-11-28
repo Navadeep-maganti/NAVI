@@ -171,13 +171,22 @@ const assessMySafety = async (req, res) => {
     });
 
     if (travelEval.action === "auto_return_home") {
-      await User.findByIdAndUpdate(req.user.id, {
+      const tripUpdate = {
         $set: {
           "travelMode.active": false,
           "travelMode.mode": "roaming",
           "travelMode.temporaryProfile": null,
         },
-      });
+      };
+      if (travelMode.startedAt) {
+        tripUpdate.$push = {
+          "travelMode.completedTripWindows": {
+            $each: [{ start: new Date(travelMode.startedAt), end: now }],
+            $slice: -10,
+          },
+        };
+      }
+      await User.findByIdAndUpdate(req.user.id, tripUpdate);
       travelMode = { active: false, mode: "roaming" };
     } else if (travelEval.action === "prompt_travel") {
       await User.findByIdAndUpdate(req.user.id, { $set: { "travelMode.lastPromptedAt": now } });
