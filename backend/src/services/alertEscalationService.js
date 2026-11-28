@@ -7,7 +7,11 @@ const ESCALATED_COOLDOWN_MS = 30 * 60 * 1000;
 const DEFAULT_SAFE_COOLDOWN_MINUTES = 45;
 const DEFAULT_SAFE_PERIMETER_METRES = 300;
 const RISK_SPIKE_OVERRIDE_DELTA = 0.25;
+const HYSTERESIS_WINDOW_MS = 3 * 60 * 1000;
+const EXTREME_RISK_IMMEDIATE_THRESHOLD = 0.85;
 const EARTH_RADIUS_METRES = 6371000;
+
+const elevatedStreakByUser = new Map();
 
 const distanceMetres = (a, b) => {
   if (
@@ -71,8 +75,43 @@ const evaluateTimeoutEscalation = (alert, preferences, now = new Date()) => {
   };
 };
 
+const evaluateCheckinHysteresis = ({
+  userId,
+  decision,
+  now = new Date(),
+  tracker = elevatedStreakByUser,
+}) => {
+  const key = String(userId);
+  if (!shouldGenerateCheckin(decision)) {
+    tracker.delete(key);
+    return { shouldTrigger: false, streak: 0 };
+  }
+
+  // Extreme critical risk bypasses 2-reading hysteresis so urgent danger is never delayed.
+  if (
+    decision?.contextualRiskLevel === "critical" &&
+    (decision?.contextualRiskScore ?? 0) >= EXTREME_RISK_IMMEDIATE_THRESHOLD
+  ) {
+    tracker.delete(key);
+    return { shouldTrigger: true, streak: 1, immediate: true };
+  }
+
+  const nowMs = now.getTime();
+  const prev = tracker.get(key);
+  if (prev && nowMs - prev.lastSeenAt <= HYSTERESIS_WINDOW_MS) {
+    tracker.delete(key);
+    return { shouldTrigger: true, streak: prev.count + 1 };
+  }
+
+  tracker.set(key, { count: 1, lastSeenAt: nowMs });
+  return { shouldTrigger: false, streak: 1 };
+};
+
 const createCheckinFromDecision = async ({ userId, currentLocation, decision }) => {
-  if (!shouldGenerateCheckin(decision)) return null;
+  if (!shouldGenerateCheckin(decision)) {
+    elevatedStreakByUser.delete(String(userId));
+    return null;
+  }
 
   const now = new Date();
   const existingActive = await SafetyAlert.findOne({
@@ -96,6 +135,11 @@ const createCheckinFromDecision = async ({ userId, currentLocation, decision }) 
     .lean();
 
   if (isWithinSafeCooldown({ recentSafeAlert, currentLocation, decision, now })) {
+    return null;
+  }
+
+  const hysteresis = evaluateCheckinHysteresis({ userId, decision, now });
+  if (!hysteresis.shouldTrigger) {
     return null;
   }
 
@@ -291,6 +335,7 @@ module.exports = {
   resolveCheckinTimeoutSeconds,
   evaluateTimeoutEscalation,
   isWithinSafeCooldown,
+  evaluateCheckinHysteresis,
   createCheckinFromDecision,
   respondToAlert,
   resolveEscalatedAlert,

@@ -5,6 +5,7 @@ const {
   resolveCheckinTimeoutSeconds,
   evaluateTimeoutEscalation,
   isWithinSafeCooldown,
+  evaluateCheckinHysteresis,
 } = require("../src/services/alertEscalationService");
 const { buildEmergencyEmail } = require("../src/services/notificationService");
 
@@ -102,6 +103,39 @@ test("isWithinSafeCooldown suppresses repeat checkins inside 300m until expired,
       now,
     }),
     false
+  );
+});
+
+test("evaluateCheckinHysteresis requires 2 consecutive elevated readings unless critical >= 0.85", () => {
+  const tracker = new Map();
+  const t0 = new Date("2026-11-28T18:00:00.000Z");
+  const t1 = new Date("2026-11-28T18:00:20.000Z");
+  const elevated = { recommendedAction: "user_checkin", contextualRiskLevel: "elevated", contextualRiskScore: 0.62 };
+  const low = { recommendedAction: "none", contextualRiskLevel: "low", contextualRiskScore: 0.15 };
+  const extreme = { recommendedAction: "confirm_sos", contextualRiskLevel: "critical", contextualRiskScore: 0.88 };
+
+  // 1st elevated reading -> suppressed (streak = 1)
+  assert.deepEqual(
+    evaluateCheckinHysteresis({ userId: "u1", decision: elevated, now: t0, tracker }),
+    { shouldTrigger: false, streak: 1 }
+  );
+  // 2nd consecutive elevated reading within 3m -> triggers
+  assert.deepEqual(
+    evaluateCheckinHysteresis({ userId: "u1", decision: elevated, now: t1, tracker }),
+    { shouldTrigger: true, streak: 2 }
+  );
+
+  // Low reading resets streak
+  evaluateCheckinHysteresis({ userId: "u1", decision: elevated, now: t0, tracker });
+  assert.deepEqual(
+    evaluateCheckinHysteresis({ userId: "u1", decision: low, now: t1, tracker }),
+    { shouldTrigger: false, streak: 0 }
+  );
+
+  // Extreme critical >= 0.85 triggers immediately
+  assert.deepEqual(
+    evaluateCheckinHysteresis({ userId: "u1", decision: extreme, now: t0, tracker }),
+    { shouldTrigger: true, streak: 1, immediate: true }
   );
 });
 
