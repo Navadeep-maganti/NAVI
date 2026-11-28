@@ -176,7 +176,10 @@ const notifyTrustedContacts = async ({ userId, alert }) => {
         status = "failed";
         channel = "email";
         detail = error.message || "Email delivery failed";
+        console.error(`[NAVI Email Error] Failed sending to ${contact.email}:`, detail);
       }
+    } else if (!transporter && contact.email) {
+      console.warn(`[NAVI Email Skipped] Configure SMTP_USER and SMTP_PASS in backend/.env to email ${contact.email}`);
     }
 
     if (webhookUrl) {

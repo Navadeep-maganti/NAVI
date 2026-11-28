@@ -10,6 +10,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { MainStackParamList } from "../navigation/types";
 import {
   fetchCurrentLocation,
   startForegroundMonitoring,
@@ -30,7 +33,8 @@ const formatDistance = (metres: number) =>
   metres >= 1000 ? `${(metres / 1000).toFixed(2)} km` : `${metres} m`;
 
 export const HomeScreen: React.FC = () => {
-  const { token, user, logout } = useAuthStore();
+  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
+  const { token, user } = useAuthStore();
   const {
     currentLocation,
     isMonitoring,
@@ -116,8 +120,8 @@ export const HomeScreen: React.FC = () => {
           <Text style={styles.brand}>NAVI</Text>
           <Text style={styles.greeting}>Hi, {user?.name || "User"}</Text>
         </View>
-        <TouchableOpacity style={styles.logoutPill} onPress={logout}>
-          <Text style={styles.logoutText}>Sign Out</Text>
+        <TouchableOpacity style={styles.logoutPill} onPress={() => navigation.navigate("Settings")}>
+          <Text style={styles.logoutText}>Settings</Text>
         </TouchableOpacity>
       </View>
 

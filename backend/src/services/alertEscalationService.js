@@ -3,9 +3,11 @@ const Preference = require("../models/Preference");
 const { emitToUser, emitEmergencyStatus, notifyTrustedContacts, sendPushToUser } = require("./notificationService");
 
 const DEFAULT_CHECKIN_TIMEOUT_SECONDS = 120;
+const ESCALATED_COOLDOWN_MS = 30 * 60 * 1000;
 
-const shouldGenerateCheckin = (decision) =>
-  decision?.recommendedAction === "user_checkin" || decision?.recommendedAction === "confirm_sos";
+const shouldGenerateCheckin = (decision, hasRecentEscalation = false) =>
+  !hasRecentEscalation &&
+  (decision?.recommendedAction === "user_checkin" || decision?.recommendedAction === "confirm_sos");
 
 const resolveCheckinTimeoutSeconds = (decision) =>
   decision?.recommendedAction === "confirm_sos" ? 60 : DEFAULT_CHECKIN_TIMEOUT_SECONDS;
@@ -29,13 +31,16 @@ const createCheckinFromDecision = async ({ userId, currentLocation, decision }) 
   if (!shouldGenerateCheckin(decision)) return null;
 
   const now = new Date();
-  const existingPending = await SafetyAlert.findOne({
+  const existingActive = await SafetyAlert.findOne({
     user: userId,
-    status: "pending_checkin",
-    checkinDeadline: { $gt: now },
+    $or: [
+      { status: "pending_checkin", checkinDeadline: { $gt: now } },
+      { status: "escalated", escalatedAt: { $gte: new Date(now.getTime() - ESCALATED_COOLDOWN_MS) } },
+    ],
   });
-  if (existingPending) {
-    return existingPending;
+  if (existingActive) {
+    // Do not open a duplicate check-in while one is pending or an emergency is already escalated.
+    return existingActive.status === "pending_checkin" ? existingActive : null;
   }
 
   const timeoutSec = resolveCheckinTimeoutSeconds(decision);
@@ -196,12 +201,34 @@ const processExpiredCheckins = async (now = new Date()) => {
   return { checked: overdueAlerts.length, escalatedCount };
 };
 
+const resolveEscalatedAlert = async ({ userId, alertId }) => {
+  const alert = await SafetyAlert.findOne({ _id: alertId, user: userId });
+  if (!alert) return { notFound: true };
+  if (alert.status !== "escalated") return { conflict: true, alert };
+
+  const now = new Date();
+  alert.status = "resolved_safe";
+  alert.userResponse = "safe";
+  alert.respondedAt = now;
+  await alert.save();
+
+  await emitEmergencyStatus(userId, {
+    alertId: String(alert._id),
+    type: alert.type,
+    status: alert.status,
+    triggerReason: "user_resolved_safe",
+    timestamp: now.toISOString(),
+  });
+  return { alert };
+};
+
 module.exports = {
   shouldGenerateCheckin,
   resolveCheckinTimeoutSeconds,
   evaluateTimeoutEscalation,
   createCheckinFromDecision,
   respondToAlert,
+  resolveEscalatedAlert,
   triggerManualSOS,
   processExpiredCheckins,
 };

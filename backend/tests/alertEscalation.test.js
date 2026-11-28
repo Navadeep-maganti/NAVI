@@ -7,11 +7,12 @@ const {
 } = require("../src/services/alertEscalationService");
 const { buildEmergencyEmail } = require("../src/services/notificationService");
 
-test("shouldGenerateCheckin only triggers on user_checkin or confirm_sos", () => {
+test("shouldGenerateCheckin only triggers on user_checkin or confirm_sos unless recently escalated", () => {
   assert.equal(shouldGenerateCheckin({ recommendedAction: "none" }), false);
   assert.equal(shouldGenerateCheckin({ recommendedAction: "log_only" }), false);
   assert.equal(shouldGenerateCheckin({ recommendedAction: "user_checkin" }), true);
   assert.equal(shouldGenerateCheckin({ recommendedAction: "confirm_sos" }), true);
+  assert.equal(shouldGenerateCheckin({ recommendedAction: "confirm_sos" }, true), false);
 });
 
 test("confirm_sos uses shorter checkin timeout than user_checkin", () => {

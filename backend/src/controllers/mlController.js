@@ -205,10 +205,52 @@ const adaptMyBehaviorProfile = async (req, res) => {
   }
 };
 
+const getMyBehaviorProfile = async (req, res) => {
+  try {
+    const profile = await BehaviorProfile.findOne({ user: req.user.id }).lean();
+    if (profile) {
+      return res.status(200).json({ success: true, profileReady: true, profile });
+    }
+
+    const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [observedPoints, earliest, latest] = await Promise.all([
+      Location.countDocuments({ user: req.user.id, recordedAt: { $gte: from } }),
+      Location.findOne({ user: req.user.id, recordedAt: { $gte: from } })
+        .sort({ recordedAt: 1 })
+        .select("recordedAt")
+        .lean(),
+      Location.findOne({ user: req.user.id, recordedAt: { $gte: from } })
+        .sort({ recordedAt: -1 })
+        .select("recordedAt")
+        .lean(),
+    ]);
+
+    const observedSpanDays =
+      earliest && latest
+        ? Number(((latest.recordedAt.getTime() - earliest.recordedAt.getTime()) / 86400000).toFixed(2))
+        : 0;
+
+    return res.status(200).json({
+      success: true,
+      profileReady: false,
+      dataSufficiency: {
+        minimumPoints: 50,
+        observedPoints,
+        minimumSpanDays: 7,
+        observedSpanDays,
+      },
+      profile: null,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Failed to load behavior profile" });
+  }
+};
+
 module.exports = {
   predictLocationRisk,
   learnMyBehaviorProfile,
   adaptMyBehaviorProfile,
+  getMyBehaviorProfile,
   analyzeMyBehavior,
   assessMySafety,
 };

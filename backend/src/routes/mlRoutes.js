@@ -4,6 +4,7 @@ const {
   predictLocationRisk,
   learnMyBehaviorProfile,
   adaptMyBehaviorProfile,
+  getMyBehaviorProfile,
   analyzeMyBehavior,
   assessMySafety,
 } = require("../controllers/mlController");
@@ -11,6 +12,7 @@ const {
 const router = express.Router();
 
 router.post("/location-risk", protect, predictLocationRisk);
+router.get("/behavior-profile", protect, getMyBehaviorProfile);
 router.post("/behavior-profile/learn", protect, learnMyBehaviorProfile);
 router.post("/behavior-profile/adapt", protect, adaptMyBehaviorProfile);
 router.post("/behavior/analyze", protect, analyzeMyBehavior);
