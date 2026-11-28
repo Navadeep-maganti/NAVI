@@ -33,8 +33,9 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Text style={styles.title}>Welcome back</Text>
-      <Text style={styles.subtitle}>Sign in to resume NAVI protection</Text>
+      <Text style={styles.eyebrow}>NAVI • PERSONAL SAFETY</Text>
+      <Text style={styles.title}>Welcome back.</Text>
+      <Text style={styles.subtitle}>Sign in to keep your safety tools close at hand.</Text>
 
       {error && (
         <View style={styles.errorBox}>
@@ -95,32 +96,32 @@ const styles = StyleSheet.create({
     padding: 24,
     justifyContent: "center",
   },
-  title: { fontSize: 28, fontWeight: "800", color: colors.text },
-  subtitle: { fontSize: 14, color: colors.muted, marginTop: 4, marginBottom: 24 },
+  eyebrow: { fontSize: 10, letterSpacing: 1.5, color: colors.primary, fontWeight: "800", marginBottom: 10 },
+  title: { fontSize: 30, fontWeight: "800", color: colors.text, letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, color: colors.muted, marginTop: 7, marginBottom: 30, lineHeight: 20 },
   errorBox: {
     backgroundColor: "#3B151A",
     borderColor: colors.danger,
     borderWidth: 1,
     padding: 12,
-    borderRadius: 10,
+    borderRadius: 14,
     marginBottom: 16,
   },
   errorText: { color: "#FCA5A5", fontSize: 13 },
-  label: { color: colors.muted, fontSize: 13, marginBottom: 6, fontWeight: "600" },
+  label: { color: colors.subtle, fontSize: 11, marginBottom: 7, fontWeight: "800", letterSpacing: .7 },
   input: {
     backgroundColor: colors.card,
     borderColor: colors.border,
     borderWidth: 1,
-    borderRadius: 10,
-    padding: 14,
+    borderRadius: 14, padding: 15,
     color: colors.text,
     fontSize: 15,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   btn: {
     backgroundColor: colors.primary,
     paddingVertical: 15,
-    borderRadius: 12,
+    borderRadius: 15,
     alignItems: "center",
     marginTop: 8,
   },

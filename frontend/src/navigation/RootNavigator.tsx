@@ -18,6 +18,7 @@ import { EmergencyScreen } from "../screens/EmergencyScreen";
 import { TrustedContactsScreen } from "../screens/TrustedContactsScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
 import { colors } from "../theme/colors";
+import { AppIcon } from "../components/AppIcon";
 import {
   AuthStackParamList,
   MainStackParamList,
@@ -34,17 +35,19 @@ const MainTabsNavigator: React.FC = () => (
   <MainTabs.Navigator
     screenOptions={{
       headerShown: false,
-      tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border },
+      tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border, height: 72, paddingTop: 7, paddingBottom: 8 },
       tabBarActiveTintColor: colors.primary,
       tabBarInactiveTintColor: colors.muted,
+      tabBarLabelStyle: { fontSize: 10, fontWeight: "700", marginTop: 1 },
+      tabBarItemStyle: { borderRadius: 14, marginHorizontal: 1 },
     }}
   >
-    <MainTabs.Screen name="Dashboard" component={HomeScreen} options={{ tabBarLabel: "Dashboard" }} />
-    <MainTabs.Screen name="LiveMap" component={LiveMapScreen} options={{ tabBarLabel: "Map" }} />
-    <MainTabs.Screen name="Sessions" component={SafeSessionsScreen} options={{ tabBarLabel: "Sessions" }} />
-    <MainTabs.Screen name="Insights" component={InsightsScreen} options={{ tabBarLabel: "Insights" }} />
-    <MainTabs.Screen name="Alerts" component={EmergencyScreen} options={{ tabBarLabel: "Alerts" }} />
-    <MainTabs.Screen name="Contacts" component={TrustedContactsScreen} options={{ tabBarLabel: "Contacts" }} />
+    <MainTabs.Screen name="Dashboard" component={HomeScreen} options={{ tabBarLabel: "Home", tabBarIcon: ({ focused }) => <AppIcon name="home" active={focused} /> }} />
+    <MainTabs.Screen name="LiveMap" component={LiveMapScreen} options={{ tabBarLabel: "Map", tabBarIcon: ({ focused }) => <AppIcon name="map" active={focused} /> }} />
+    <MainTabs.Screen name="Sessions" component={SafeSessionsScreen} options={{ tabBarLabel: "Sessions", tabBarIcon: ({ focused }) => <AppIcon name="session" active={focused} /> }} />
+    <MainTabs.Screen name="Insights" component={InsightsScreen} options={{ tabBarLabel: "Insights", tabBarIcon: ({ focused }) => <AppIcon name="insights" active={focused} /> }} />
+    <MainTabs.Screen name="Alerts" component={EmergencyScreen} options={{ tabBarLabel: "Alerts", tabBarIcon: ({ focused }) => <AppIcon name="alert" active={focused} /> }} />
+    <MainTabs.Screen name="Contacts" component={TrustedContactsScreen} options={{ tabBarLabel: "People", tabBarIcon: ({ focused }) => <AppIcon name="contacts" active={focused} /> }} />
   </MainTabs.Navigator>
 );
 
@@ -64,13 +67,13 @@ export const RootNavigator: React.FC = () => {
   return (
     <NavigationContainer>
       {!token ? (
-        <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+        <AuthStack.Navigator screenOptions={{ headerShown: false, animation: "fade_from_bottom" }}>
           <AuthStack.Screen name="Welcome" component={SplashBrandScreen} />
           <AuthStack.Screen name="Login" component={LoginScreen} />
           <AuthStack.Screen name="Register" component={RegisterScreen} />
         </AuthStack.Navigator>
       ) : !onboardingCompleted ? (
-        <OnboardingStack.Navigator screenOptions={{ headerShown: false }}>
+        <OnboardingStack.Navigator screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
           <OnboardingStack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
           <OnboardingStack.Screen name="LocationPermission" component={LocationPermissionScreen} />
           <OnboardingStack.Screen name="NotificationPermission" component={NotificationPermissionScreen} />
@@ -80,6 +83,8 @@ export const RootNavigator: React.FC = () => {
           screenOptions={{
             headerStyle: { backgroundColor: colors.card },
             headerTintColor: colors.text,
+            headerTitleStyle: { fontWeight: "800" },
+            animation: "slide_from_right",
           }}
         >
           <MainStack.Screen
