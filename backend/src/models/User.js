@@ -45,6 +45,15 @@ const userSchema = new mongoose.Schema(
             enum: ["android", "ios", null],
             default: null,
         },
+
+        travelMode: {
+            active: { type: Boolean, default: false },
+            mode: { type: String, enum: ["roaming", "local_pattern"], default: "roaming" },
+            startedAt: { type: Date, default: null },
+            lastPromptedAt: { type: Date, default: null },
+            dismissedUntil: { type: Date, default: null },
+            temporaryProfile: { type: mongoose.Schema.Types.Mixed, default: null },
+        },
     },
     {
         timestamps: true,

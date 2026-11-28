@@ -3,10 +3,17 @@ const Location = require("../models/Location");
 const BehaviorProfile = require("../models/BehaviorProfile");
 const Preference = require("../models/Preference");
 const SafeSession = require("../models/SafeSession");
+const User = require("../models/User");
 const { findActiveAreaZones } = require("./areaRiskController");
 const { evaluateSafetyDecision } = require("../services/safetyDecisionEngine");
 const { createCheckinFromDecision } = require("../services/alertEscalationService");
 const { reclusterUserProfile } = require("../services/adaptiveLearningService");
+const { emitToUser, sendPushToUser } = require("../services/notificationService");
+const {
+  evaluateTravelState,
+  confirmTravelMode,
+  maybeRefreshTravelProfile,
+} = require("../services/travelModeService");
 const { formatLocalIso, parseOffsetMinutesFromIso } = require("../utils/time");
 
 const predictLocationRisk = async (req, res) => {
@@ -139,7 +146,7 @@ const assessMySafety = async (req, res) => {
 
   try {
     const now = new Date();
-    const [areaZones, profile, recentHistory, preferences, activeSession] = await Promise.all([
+    const [areaZones, profile, recentHistory, preferences, activeSession, userDoc] = await Promise.all([
       findActiveAreaZones(latitude, longitude, 2000),
       BehaviorProfile.findOne({ user: req.user.id })
         .select("regularPlaces routineRoutes activityPatterns movementBaseline")
@@ -151,7 +158,45 @@ const assessMySafety = async (req, res) => {
         .lean(),
       Preference.findOne({ user: req.user.id }).lean(),
       SafeSession.findOne({ user: req.user.id, status: "active", endsAt: { $gt: now } }).lean(),
+      User.findById(req.user.id).select("travelMode").lean(),
     ]);
+
+    let travelMode = userDoc?.travelMode || { active: false, mode: "roaming" };
+    let travelPrompt = null;
+    const travelEval = evaluateTravelState({
+      currentLocation: { latitude, longitude },
+      homeProfile: profile,
+      travelMode,
+      now,
+    });
+
+    if (travelEval.action === "auto_return_home") {
+      await User.findByIdAndUpdate(req.user.id, {
+        $set: {
+          "travelMode.active": false,
+          "travelMode.mode": "roaming",
+          "travelMode.temporaryProfile": null,
+        },
+      });
+      travelMode = { active: false, mode: "roaming" };
+    } else if (travelEval.action === "prompt_travel") {
+      await User.findByIdAndUpdate(req.user.id, { $set: { "travelMode.lastPromptedAt": now } });
+      travelPrompt = { distanceKm: travelEval.distanceKm };
+      emitToUser(req.user.id, "travel:prompt", travelPrompt);
+      await sendPushToUser({
+        userId: req.user.id,
+        title: "Are you traveling?",
+        body: `You're ~${travelEval.distanceKm} km from your usual area. Tap to enable Travel Mode.`,
+        data: { type: "travel_prompt", distanceKm: travelEval.distanceKm },
+      });
+    } else if (travelMode.active) {
+      travelMode = await maybeRefreshTravelProfile(req.user.id, travelMode);
+    }
+
+    const effectiveProfile =
+      travelMode.active && travelMode.mode === "local_pattern" && travelMode.temporaryProfile
+        ? travelMode.temporaryProfile
+        : profile || null;
 
     const toMlPoint = (point) => ({
       latitude: point.latitude,
@@ -164,22 +209,34 @@ const assessMySafety = async (req, res) => {
     const currentLocation = { latitude, longitude, speed, accuracy, timestamp: formatLocalIso(recordedAt, offset) };
     const assessment = await assessAreaSafety({
       currentLocation,
-      recentLocations: profile ? recentHistory.reverse().map(toMlPoint) : [],
+      recentLocations: effectiveProfile ? recentHistory.reverse().map(toMlPoint) : [],
       areaZones,
-      profile: profile || null,
+      profile: effectiveProfile,
     });
     const decision = evaluateSafetyDecision({
       assessment,
       currentLocation,
       preferences,
       activeSession,
+      travelMode,
     });
     const checkinAlert = await createCheckinFromDecision({
       userId: req.user.id,
       currentLocation,
       decision,
     });
-    return res.status(200).json({ success: true, assessment, decision, checkinAlert });
+    return res.status(200).json({
+      success: true,
+      assessment,
+      decision,
+      checkinAlert,
+      travelPrompt,
+      travelStatus: {
+        active: Boolean(travelMode.active),
+        mode: travelMode.mode || "roaming",
+        temporaryPlacesCount: travelMode.temporaryProfile?.regularPlaces?.length || 0,
+      },
+    });
   } catch (error) {
     return res.status(error.status === 422 ? 400 : 502).json({
       success: false,
@@ -253,6 +310,28 @@ const getMyBehaviorProfile = async (req, res) => {
   }
 };
 
+const respondToTravelPrompt = async (req, res) => {
+  try {
+    const { traveling } = req.body;
+    if (typeof traveling !== "boolean") {
+      return res.status(400).json({ success: false, message: "traveling must be boolean" });
+    }
+    const updated = await confirmTravelMode(req.user.id, traveling);
+    return res.status(200).json({ success: true, travelMode: updated?.travelMode || null });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Failed to update travel mode" });
+  }
+};
+
+const getTravelModeStatus = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("travelMode").lean();
+    return res.status(200).json({ success: true, travelMode: user?.travelMode || { active: false, mode: "roaming" } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Failed to fetch travel mode" });
+  }
+};
+
 module.exports = {
   predictLocationRisk,
   learnMyBehaviorProfile,
@@ -260,4 +339,6 @@ module.exports = {
   getMyBehaviorProfile,
   analyzeMyBehavior,
   assessMySafety,
+  respondToTravelPrompt,
+  getTravelModeStatus,
 };

@@ -281,3 +281,83 @@ def adapt_behavior_profile(request: AdaptiveLearnRequest) -> dict:
         "singleDayClustersFiltered": len(dropped_cluster_ids),
     }
     return result
+
+
+TRAVEL_MIN_POINTS = 12
+TRAVEL_MIN_SPAN_HOURS = 4.0
+TRAVEL_EPS_METRES = 120
+TRAVEL_MIN_SAMPLES = 4
+
+
+def learn_temporary_travel_profile(locations: list[LocationPoint]) -> dict:
+    """Discover temporary stay clusters/routes during a multi-day trip without a 7-day wait."""
+    points = sorted(locations, key=lambda p: p.timestamp)
+    if len(points) < TRAVEL_MIN_POINTS:
+        return {"hasPattern": False, "observedPoints": len(points)}
+
+    span_hours = (points[-1].timestamp - points[0].timestamp).total_seconds() / 3600.0
+    if span_hours < TRAVEL_MIN_SPAN_HOURS:
+        return {"hasPattern": False, "observedPoints": len(points), "observedSpanHours": round(span_hours, 2)}
+
+    coordinates = np.radians([[p.latitude, p.longitude] for p in points])
+    labels = DBSCAN(
+        eps=TRAVEL_EPS_METRES / EARTH_RADIUS_METRES,
+        min_samples=TRAVEL_MIN_SAMPLES,
+        metric="haversine",
+        algorithm="ball_tree",
+    ).fit_predict(coordinates)
+
+    clusters: dict[int, list[LocationPoint]] = defaultdict(list)
+    for point, label in zip(points, labels):
+        if label >= 0:
+            clusters[int(label)].append(point)
+
+    if not clusters:
+        return {"hasPattern": False, "observedPoints": len(points), "observedSpanHours": round(span_hours, 2)}
+
+    regular_places = []
+    for label, cluster_points in sorted(clusters.items()):
+        centroid = LocationPoint(
+            latitude=float(np.mean([p.latitude for p in cluster_points])),
+            longitude=float(np.mean([p.longitude for p in cluster_points])),
+            speed=0,
+            accuracy=0,
+            timestamp=cluster_points[-1].timestamp,
+        )
+        regular_places.append({
+            "clusterId": label,
+            "latitude": centroid.latitude,
+            "longitude": centroid.longitude,
+            "visitCount": len(cluster_points),
+            "peakHours": _top_values(Counter(p.timestamp.hour for p in cluster_points)),
+            "peakWeekdays": _top_values(Counter(p.timestamp.weekday() for p in cluster_points)),
+            "boundary": _cluster_boundary(cluster_points, centroid),
+        })
+
+    route_counts: Counter = Counter()
+    for idx in range(1, len(points)):
+        prev_lbl, curr_lbl = int(labels[idx - 1]), int(labels[idx])
+        elapsed = (points[idx].timestamp - points[idx - 1].timestamp).total_seconds()
+        if prev_lbl >= 0 and curr_lbl >= 0 and prev_lbl != curr_lbl and elapsed <= MAX_ROUTE_GAP_SECONDS:
+            route_counts[(prev_lbl, curr_lbl)] += 1
+
+    speeds = [p.speed for p in points]
+    return {
+        "hasPattern": True,
+        "observedPoints": len(points),
+        "observedSpanHours": round(span_hours, 2),
+        "regularPlaces": regular_places,
+        "routineRoutes": [
+            {"fromClusterId": s, "toClusterId": e, "transitionCount": c}
+            for (s, e), c in route_counts.most_common()
+        ],
+        "activityPatterns": {
+            "hourlyActivity": {str(h): c for h, c in sorted(Counter(p.timestamp.hour for p in points).items())},
+            "weekdayActivity": {str(d): c for d, c in sorted(Counter(p.timestamp.weekday() for p in points).items())},
+        },
+        "movementBaseline": {
+            "meanSpeedMps": round(float(np.mean(speeds)), 3),
+            "speed95Mps": round(float(np.percentile(speeds, 95)), 3),
+            "maxSpeedMps": round(float(np.max(speeds)), 3),
+        },
+    }

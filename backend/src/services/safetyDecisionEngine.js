@@ -30,7 +30,7 @@ const adjustBehavioralScore = (
   currentLocation,
   preferences,
   activeSession,
-  { isDaytime = false } = {}
+  { isDaytime = false, travelRoaming = false } = {}
 ) => {
   if (!behavioralRisk) return { adjustedScore: null, suppressedSignals: [] };
 
@@ -45,7 +45,16 @@ const adjustBehavioralScore = (
     const weight = SIGNAL_WEIGHTS[signal.type] ?? 0.2;
     let score = signal.score ?? 0;
 
-    if (signal.type === "unusualLocation" && (!preferences.enableUnknownAreaAlerts || activeSession?.suppressLocationAlerts)) {
+    if (
+      (signal.type === "unusualLocation" || signal.type === "unusualRoute") &&
+      travelRoaming
+    ) {
+      score = 0;
+      suppressedSignals.push("travelModeRoaming");
+    } else if (
+      signal.type === "unusualLocation" &&
+      (!preferences.enableUnknownAreaAlerts || activeSession?.suppressLocationAlerts)
+    ) {
       score = 0;
       suppressedSignals.push("unusualLocation");
     } else if (signal.type === "unusualLocation" && isDaytime && abnormalMovementScore < 0.3) {
@@ -97,6 +106,7 @@ const evaluateSafetyDecision = ({
   currentLocation,
   preferences = {},
   activeSession = null,
+  travelMode = null,
 }) => {
   const prefs = {
     lateNightThreshold: preferences?.lateNightThreshold ?? 23,
@@ -121,12 +131,13 @@ const evaluateSafetyDecision = ({
   }
 
   const isDaytime = hour >= 6 && hour < prefs.lateNightThreshold;
+  const travelRoaming = Boolean(travelMode?.active && travelMode?.mode === "roaming");
   const { adjustedScore: behScore, suppressedSignals } = adjustBehavioralScore(
     assessment?.behavioralRisk,
     currentLocation,
     prefs,
     activeSession,
-    { isDaytime }
+    { isDaytime, travelRoaming }
   );
 
   // Fuse environmental risk + adjusted behavioral score.

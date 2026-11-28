@@ -24,6 +24,7 @@ const postToMl = async (path, payload) => {
 const getLocationRisk = (location) => postToMl("/v1/location-risk", location);
 const learnBehaviorProfile = (locations) => postToMl("/v1/behavior-profile/learn", { locations });
 const adaptBehaviorProfile = (payload) => postToMl("/v1/behavior-profile/adapt", payload);
+const learnTravelProfile = (locations) => postToMl("/v1/behavior-profile/travel-learn", { locations });
 const analyzeBehavior = (payload) => postToMl("/v1/behavior/analyze", payload);
 const assessAreaSafety = (payload) => postToMl("/v1/area-safety/assess", payload);
 
@@ -31,6 +32,7 @@ module.exports = {
   getLocationRisk,
   learnBehaviorProfile,
   adaptBehaviorProfile,
+  learnTravelProfile,
   analyzeBehavior,
   assessAreaSafety,
 };

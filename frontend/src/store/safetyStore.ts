@@ -116,6 +116,8 @@ interface SafetyState {
   liveShareSession: ActiveLiveShare | null;
   liveShareActive: boolean;
   pendingCheckin: PendingCheckin | null;
+  travelPrompt: { distanceKm: number } | null;
+  travelStatus: { active: boolean; mode: "roaming" | "local_pattern"; temporaryPlacesCount: number } | null;
   sosLoading: boolean;
   lastSosMessage: string | null;
   refreshing: boolean;
@@ -134,6 +136,7 @@ interface SafetyState {
   sendLocationAndAssess: (point: GeoPoint) => Promise<void>;
   triggerSOS: (notes?: string) => Promise<boolean>;
   respondToCheckin: (response: "safe" | "need_help", safeDurationMinutes?: number) => Promise<void>;
+  respondToTravelPrompt: (traveling: boolean) => Promise<void>;
 }
 
 export const useSafetyStore = create<SafetyState>((set, get) => ({
@@ -150,6 +153,8 @@ export const useSafetyStore = create<SafetyState>((set, get) => ({
   liveShareSession: null,
   liveShareActive: false,
   pendingCheckin: null,
+  travelPrompt: null,
+  travelStatus: null,
   sosLoading: false,
   lastSosMessage: null,
   refreshing: false,
@@ -172,6 +177,9 @@ export const useSafetyStore = create<SafetyState>((set, get) => ({
     socket.on("disconnect", () => set({ socketConnected: false }));
     socket.on("checkin:prompt", (payload: PendingCheckin) => {
       set({ pendingCheckin: payload });
+    });
+    socket.on("travel:prompt", (payload: { distanceKm: number }) => {
+      set({ travelPrompt: payload });
     });
     socket.on("emergency:escalated", (payload: { notifiedCount?: number }) => {
       set({
@@ -359,6 +367,8 @@ export const useSafetyStore = create<SafetyState>((set, get) => ({
               checkinDeadline: data.checkinAlert.checkinDeadline,
             }
           : get().pendingCheckin,
+        travelPrompt: data.travelPrompt || get().travelPrompt,
+        travelStatus: data.travelStatus || get().travelStatus,
       });
       await Promise.all([
         get().refreshDashboard(true),
@@ -411,6 +421,28 @@ export const useSafetyStore = create<SafetyState>((set, get) => ({
       });
     } catch {
       set({ pendingCheckin: null });
+    }
+  },
+
+  respondToTravelPrompt: async (traveling) => {
+    try {
+      const { data } = await apiClient.post("/api/ml/travel-mode/respond", { traveling });
+      const tm = data.travelMode;
+      set({
+        travelPrompt: null,
+        travelStatus: tm
+          ? {
+              active: Boolean(tm.active),
+              mode: tm.mode || "roaming",
+              temporaryPlacesCount: tm.temporaryProfile?.regularPlaces?.length || 0,
+            }
+          : null,
+        lastSosMessage: traveling
+          ? "Travel Mode enabled. NAVI will adapt to your trip."
+          : "Got it — normal home-area vigilance remains active.",
+      });
+    } catch {
+      set({ travelPrompt: null });
     }
   },
 }));
