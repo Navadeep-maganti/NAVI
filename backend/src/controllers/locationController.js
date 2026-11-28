@@ -2,6 +2,7 @@ const Location = require('../models/Location');
 const User = require('../models/User');
 const LiveShareSession = require('../models/LiveShareSession');
 const { emitToUser, emitToShareRoom } = require('../services/notificationService');
+const { parseOffsetMinutesFromIso } = require('../utils/time');
 
 // Values are deliberately conservative for a personal-safety tracker and can
 // be adjusted here if the product needs to support aircraft or older GPS units.
@@ -47,9 +48,13 @@ const updateLocation = async (req,res) => {
             });
         }
 
-        const { latitude, longitude, altitude, speed = 0, accuracy, timestamp, recordedAt: requestRecordedAt } = req.body;
+        const { latitude, longitude, altitude, speed = 0, accuracy, timestamp, recordedAt: requestRecordedAt, timezoneOffsetMinutes } = req.body;
         const receivedTimestamp = timestamp ?? requestRecordedAt;
         const recordedAt = receivedTimestamp === undefined ? new Date() : new Date(receivedTimestamp);
+        const parsedOffset = parseOffsetMinutesFromIso(receivedTimestamp);
+        const resolvedOffset = Number.isFinite(Number(timezoneOffsetMinutes))
+            ? Number(timezoneOffsetMinutes)
+            : (parsedOffset ?? 0);
 
         if (
             !isFiniteNumber(latitude) ||
@@ -130,6 +135,7 @@ const updateLocation = async (req,res) => {
             speed,
             accuracy,
             recordedAt,
+            timezoneOffsetMinutes: resolvedOffset,
         });
 
         const livePayload = {

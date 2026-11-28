@@ -7,6 +7,7 @@ const { findActiveAreaZones } = require("./areaRiskController");
 const { evaluateSafetyDecision } = require("../services/safetyDecisionEngine");
 const { createCheckinFromDecision } = require("../services/alertEscalationService");
 const { reclusterUserProfile } = require("../services/adaptiveLearningService");
+const { formatLocalIso, parseOffsetMinutesFromIso } = require("../utils/time");
 
 const predictLocationRisk = async (req, res) => {
   const { latitude, longitude, accuracy, speed, timestamp } = req.body;
@@ -41,7 +42,7 @@ const learnMyBehaviorProfile = async (req, res) => {
   try {
     const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const history = await Location.find({ user: req.user.id, recordedAt: { $gte: from } })
-      .select("latitude longitude speed accuracy recordedAt")
+      .select("latitude longitude speed accuracy recordedAt timezoneOffsetMinutes")
       .sort({ recordedAt: 1 })
       .limit(10000)
       .lean();
@@ -50,7 +51,7 @@ const learnMyBehaviorProfile = async (req, res) => {
       longitude: point.longitude,
       speed: point.speed,
       accuracy: point.accuracy,
-      timestamp: point.recordedAt.toISOString(),
+      timestamp: formatLocalIso(point.recordedAt, point.timezoneOffsetMinutes || 0),
     })));
 
     if (!result.isReady) {
@@ -73,11 +74,14 @@ const learnMyBehaviorProfile = async (req, res) => {
 };
 
 const analyzeMyBehavior = async (req, res) => {
-  const { latitude, longitude, speed, accuracy, timestamp } = req.body;
+  const { latitude, longitude, speed, accuracy, timestamp, timezoneOffsetMinutes } = req.body;
   const recordedAt = timestamp === undefined ? new Date() : new Date(timestamp);
   if (Number.isNaN(recordedAt.getTime())) {
     return res.status(400).json({ success: false, message: "timestamp is invalid" });
   }
+  const offset = Number.isFinite(Number(timezoneOffsetMinutes))
+    ? Number(timezoneOffsetMinutes)
+    : (parseOffsetMinutesFromIso(timestamp) ?? 0);
 
   try {
     const profile = await BehaviorProfile.findOne({ user: req.user.id })
@@ -94,7 +98,7 @@ const analyzeMyBehavior = async (req, res) => {
       user: req.user.id,
       recordedAt: { $lt: recordedAt },
     })
-      .select("latitude longitude speed accuracy recordedAt")
+      .select("latitude longitude speed accuracy recordedAt timezoneOffsetMinutes")
       .sort({ recordedAt: -1 })
       .limit(10)
       .lean();
@@ -103,10 +107,10 @@ const analyzeMyBehavior = async (req, res) => {
       longitude: point.longitude,
       speed: point.speed,
       accuracy: point.accuracy,
-      timestamp: point.recordedAt.toISOString(),
+      timestamp: formatLocalIso(point.recordedAt, point.timezoneOffsetMinutes || 0),
     });
     const result = await analyzeBehavior({
-      currentLocation: { latitude, longitude, speed, accuracy, timestamp: recordedAt.toISOString() },
+      currentLocation: { latitude, longitude, speed, accuracy, timestamp: formatLocalIso(recordedAt, offset) },
       recentLocations: recentHistory.reverse().map(toMlPoint),
       profile,
     });
@@ -121,7 +125,7 @@ const analyzeMyBehavior = async (req, res) => {
 };
 
 const assessMySafety = async (req, res) => {
-  const { latitude, longitude, speed = 0, accuracy = 10, timestamp } = req.body;
+  const { latitude, longitude, speed = 0, accuracy = 10, timestamp, timezoneOffsetMinutes } = req.body;
   if (typeof latitude !== "number" || !Number.isFinite(latitude) || typeof longitude !== "number" || !Number.isFinite(longitude)) {
     return res.status(400).json({ success: false, message: "latitude and longitude must be finite numbers" });
   }
@@ -129,6 +133,9 @@ const assessMySafety = async (req, res) => {
   if (Number.isNaN(recordedAt.getTime())) {
     return res.status(400).json({ success: false, message: "timestamp is invalid" });
   }
+  const offset = Number.isFinite(Number(timezoneOffsetMinutes))
+    ? Number(timezoneOffsetMinutes)
+    : (parseOffsetMinutesFromIso(timestamp) ?? 0);
 
   try {
     const now = new Date();
@@ -138,7 +145,7 @@ const assessMySafety = async (req, res) => {
         .select("regularPlaces routineRoutes activityPatterns movementBaseline")
         .lean(),
       Location.find({ user: req.user.id, recordedAt: { $lt: recordedAt } })
-        .select("latitude longitude speed accuracy recordedAt")
+        .select("latitude longitude speed accuracy recordedAt timezoneOffsetMinutes")
         .sort({ recordedAt: -1 })
         .limit(10)
         .lean(),
@@ -151,10 +158,10 @@ const assessMySafety = async (req, res) => {
       longitude: point.longitude,
       speed: point.speed,
       accuracy: point.accuracy,
-      timestamp: point.recordedAt.toISOString(),
+      timestamp: formatLocalIso(point.recordedAt, point.timezoneOffsetMinutes || 0),
     });
 
-    const currentLocation = { latitude, longitude, speed, accuracy, timestamp: recordedAt.toISOString() };
+    const currentLocation = { latitude, longitude, speed, accuracy, timestamp: formatLocalIso(recordedAt, offset) };
     const assessment = await assessAreaSafety({
       currentLocation,
       recentLocations: profile ? recentHistory.reverse().map(toMlPoint) : [],

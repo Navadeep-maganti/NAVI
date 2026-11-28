@@ -46,6 +46,13 @@ const locationSchema = new mongoose.Schema(
             type: Date,
             default: Date.now,
         },
+
+        timezoneOffsetMinutes: {
+            type: Number,
+            default: 0,
+            min: -720,
+            max: 840,
+        },
     },
     {
         timestamps: true,

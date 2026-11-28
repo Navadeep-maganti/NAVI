@@ -1,6 +1,7 @@
 import { io, Socket } from "socket.io-client";
 import { create } from "zustand";
 import { API_BASE_URL, apiClient } from "../config/api";
+import { getTimezoneOffsetMinutes, toLocalIsoString } from "../utils/time";
 
 export interface GeoPoint {
   latitude: number;
@@ -9,6 +10,7 @@ export interface GeoPoint {
   speed: number;
   accuracy: number;
   timestamp: string;
+  timezoneOffsetMinutes?: number;
 }
 
 export interface HistoryPoint {
@@ -324,6 +326,7 @@ export const useSafetyStore = create<SafetyState>((set, get) => ({
         speed: point.speed,
         accuracy: point.accuracy,
         timestamp: point.timestamp,
+        timezoneOffsetMinutes: point.timezoneOffsetMinutes ?? getTimezoneOffsetMinutes(),
       });
     } catch {
       // Location may be deduplicated (4xx/skipped) or rate-limited; still run assessment.
@@ -336,6 +339,7 @@ export const useSafetyStore = create<SafetyState>((set, get) => ({
         speed: point.speed,
         accuracy: point.accuracy,
         timestamp: point.timestamp,
+        timezoneOffsetMinutes: point.timezoneOffsetMinutes ?? getTimezoneOffsetMinutes(),
       });
       const decision = data.decision;
       const assessment = data.assessment;
@@ -374,7 +378,7 @@ export const useSafetyStore = create<SafetyState>((set, get) => ({
         longitude: loc?.longitude,
         speed: loc?.speed ?? 0,
         accuracy: loc?.accuracy ?? 10,
-        timestamp: loc?.timestamp || new Date().toISOString(),
+        timestamp: loc?.timestamp || toLocalIsoString(),
         notes,
       });
       const count = data.alert?.notifiedContacts?.length ?? 0;

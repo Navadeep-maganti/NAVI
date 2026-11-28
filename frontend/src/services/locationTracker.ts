@@ -1,5 +1,6 @@
 import * as Location from "expo-location";
 import { GeoPoint, MonitoringPreset } from "../store/safetyStore";
+import { getTimezoneOffsetMinutes, toLocalIsoString } from "../utils/time";
 
 let activeSubscription: Location.LocationSubscription | null = null;
 
@@ -9,14 +10,18 @@ const PRESET_CONFIG: Record<MonitoringPreset, { timeInterval: number; distanceIn
   saver: { timeInterval: 60000, distanceInterval: 50 },
 };
 
-const toGeoPoint = (loc: Location.LocationObject): GeoPoint => ({
-  latitude: loc.coords.latitude,
-  longitude: loc.coords.longitude,
-  altitude: loc.coords.altitude ?? 0,
-  speed: Math.max(0, loc.coords.speed ?? 0),
-  accuracy: Math.max(0, loc.coords.accuracy ?? 10),
-  timestamp: new Date(loc.timestamp).toISOString(),
-});
+const toGeoPoint = (loc: Location.LocationObject): GeoPoint => {
+  const dt = new Date(loc.timestamp);
+  return {
+    latitude: loc.coords.latitude,
+    longitude: loc.coords.longitude,
+    altitude: loc.coords.altitude ?? 0,
+    speed: Math.max(0, loc.coords.speed ?? 0),
+    accuracy: Math.max(0, loc.coords.accuracy ?? 10),
+    timestamp: toLocalIsoString(dt),
+    timezoneOffsetMinutes: getTimezoneOffsetMinutes(dt),
+  };
+};
 
 export const fetchCurrentLocation = async (): Promise<GeoPoint | null> => {
   const perm = await Location.getForegroundPermissionsAsync();

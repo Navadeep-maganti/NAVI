@@ -2,6 +2,7 @@ const Location = require("../models/Location");
 const BehaviorProfile = require("../models/BehaviorProfile");
 const SafetyAlert = require("../models/SafetyAlert");
 const { adaptBehaviorProfile } = require("./mlService");
+const { formatLocalIso } = require("../utils/time");
 
 const buildExcludedWindows = (alerts = []) =>
   alerts.map((alert) => {
@@ -22,7 +23,7 @@ const reclusterUserProfile = async (
 
   const [history, previousProfile, anomalyAlerts] = await Promise.all([
     Location.find({ user: userId, recordedAt: { $gte: from } })
-      .select("latitude longitude speed accuracy recordedAt")
+      .select("latitude longitude speed accuracy recordedAt timezoneOffsetMinutes")
       .sort({ recordedAt: 1 })
       .limit(10000)
       .lean(),
@@ -48,7 +49,7 @@ const reclusterUserProfile = async (
       longitude: point.longitude,
       speed: point.speed,
       accuracy: point.accuracy,
-      timestamp: point.recordedAt.toISOString(),
+      timestamp: formatLocalIso(point.recordedAt, point.timezoneOffsetMinutes || 0),
     })),
     previousProfile: previousProfile || null,
     excludedWindows: buildExcludedWindows(anomalyAlerts),
