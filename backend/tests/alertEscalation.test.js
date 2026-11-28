@@ -5,6 +5,7 @@ const {
   resolveCheckinTimeoutSeconds,
   evaluateTimeoutEscalation,
 } = require("../src/services/alertEscalationService");
+const { buildEmergencyEmail } = require("../src/services/notificationService");
 
 test("shouldGenerateCheckin only triggers on user_checkin or confirm_sos", () => {
   assert.equal(shouldGenerateCheckin({ recommendedAction: "none" }), false);
@@ -42,5 +43,20 @@ test("evaluateTimeoutEscalation escalates overdue pending checkins and respects 
   );
   assert.equal(overdueNoAutoAlert.shouldEscalate, true);
   assert.equal(overdueNoAutoAlert.shouldNotifyContacts, false);
+});
+
+test("buildEmergencyEmail includes user name, maps pin, and live tracking URL", () => {
+  const email = buildEmergencyEmail({
+    userName: "Aarav",
+    triggerReason: "manual_sos",
+    mapsUrl: "https://maps.google.com/?q=12.9716,77.5946",
+    liveShareUrl: "http://localhost:5000/api/live-share/view/abc123",
+    notes: "Walking home late",
+  });
+
+  assert.match(email.subject, /NAVI Emergency Alert.*Aarav/);
+  assert.match(email.text, /manual_sos/);
+  assert.match(email.text, /maps\.google\.com\/\?q=12\.9716,77\.5946/);
+  assert.match(email.html, /\/api\/live-share\/view\/abc123/);
 });
 

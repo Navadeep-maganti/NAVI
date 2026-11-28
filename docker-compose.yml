@@ -36,6 +36,14 @@ services:
       - ML_SERVICE_TIMEOUT_MS=5000
       - ML_SERVICE_API_KEY=${ML_SERVICE_API_KEY:-}
       - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - PUBLIC_APP_URL=${PUBLIC_APP_URL:-http://localhost:5000}
+      - SMTP_SERVICE=${SMTP_SERVICE:-gmail}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
