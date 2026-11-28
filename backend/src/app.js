@@ -27,10 +27,25 @@ const { processExpiredCheckins } = require("./services/alertEscalationService");
 const { runPeriodicReclustering } = require("./services/adaptiveLearningService");
 
 const app = express();
+app.set("trust proxy", 1);
+
+if (
+  process.env.NODE_ENV === "production" &&
+  (!process.env.JWT_SECRET ||
+    process.env.JWT_SECRET === "supersecretkey" ||
+    process.env.JWT_SECRET === "replace-with-a-long-random-secret")
+) {
+  console.error("FATAL: Set a strong JWT_SECRET in production.");
+  process.exit(1);
+}
 
 connectDB();
 
-app.use(cors());
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((s) => s.trim()).filter(Boolean)
+  : "*";
+
+app.use(cors({ origin: corsOrigins }));
 app.use(helmet());
 app.use(morgan("dev"));
 
@@ -104,3 +119,15 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`NAVI backend running on port ${PORT}`);
 });
+
+const shutdown = (signal) => {
+  console.log(`Received ${signal}, shutting down gracefully...`);
+  clearInterval(escalationTimer);
+  clearInterval(reclusterTimer);
+  server.close(() => {
+    mongoose.connection.close(false).then(() => process.exit(0));
+  });
+};
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
