@@ -25,11 +25,19 @@ const SIGNAL_WEIGHTS = {
   abnormalMovement: 0.2,
 };
 
-const adjustBehavioralScore = (behavioralRisk, currentLocation, preferences, activeSession) => {
+const adjustBehavioralScore = (
+  behavioralRisk,
+  currentLocation,
+  preferences,
+  activeSession,
+  { isDaytime = false } = {}
+) => {
   if (!behavioralRisk) return { adjustedScore: null, suppressedSignals: [] };
 
   const suppressedSignals = [];
   const signals = behavioralRisk.signals || [];
+  const abnormalMovementScore =
+    signals.find((s) => s.type === "abnormalMovement")?.score ?? 0;
   let weightedSum = 0;
   let totalWeight = 0;
 
@@ -40,6 +48,10 @@ const adjustBehavioralScore = (behavioralRisk, currentLocation, preferences, act
     if (signal.type === "unusualLocation" && (!preferences.enableUnknownAreaAlerts || activeSession?.suppressLocationAlerts)) {
       score = 0;
       suppressedSignals.push("unusualLocation");
+    } else if (signal.type === "unusualLocation" && isDaytime && abnormalMovementScore < 0.3) {
+      // Daytime errands in new places with normal speed are far less likely to be emergencies.
+      score *= 0.75;
+      suppressedSignals.push("daytimeLocationDampened");
     }
     if (signal.type === "unusualTravelTime" && activeSession?.suppressTimeAlerts) {
       score = 0;
@@ -108,11 +120,13 @@ const evaluateSafetyDecision = ({
     contextAdjustments.push("session_suppresses_time_alerts");
   }
 
+  const isDaytime = hour >= 6 && hour < prefs.lateNightThreshold;
   const { adjustedScore: behScore, suppressedSignals } = adjustBehavioralScore(
     assessment?.behavioralRisk,
     currentLocation,
     prefs,
-    activeSession
+    activeSession,
+    { isDaytime }
   );
 
   // Fuse environmental risk + adjusted behavioral score.

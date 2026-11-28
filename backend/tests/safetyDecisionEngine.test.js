@@ -102,3 +102,34 @@ test("autoAlertTrustedContacts=false prevents emergency SOS recommendation even 
   assert.equal(result.shouldTriggerEmergencyAlert, false);
 });
 
+test("daytime unfamiliar location with normal movement is dampened compared to late night", () => {
+  const daytimeAssessment = {
+    environmentalRisk: { score: 0.45, timeContext: { hour: 14, isNight: false }, matchedZones: [{ id: "z1" }] },
+    behavioralRisk: {
+      deviationScore: 0.5,
+      signals: [
+        { type: "unusualLocation", score: 1.0 },
+        { type: "unusualTravelTime", score: 0.1 },
+        { type: "abnormalMovement", score: 0.0 },
+      ],
+    },
+  };
+  const nightAssessment = {
+    ...daytimeAssessment,
+    environmentalRisk: { score: 0.45, timeContext: { hour: 23, isNight: true }, matchedZones: [{ id: "z1" }] },
+  };
+
+  const dayRes = evaluateSafetyDecision({
+    assessment: daytimeAssessment,
+    currentLocation: { ...baseLocation, timestamp: "2026-11-28T14:00:00+05:30" },
+  });
+  const nightRes = evaluateSafetyDecision({
+    assessment: nightAssessment,
+    currentLocation: { ...baseLocation, timestamp: "2026-11-28T23:30:00+05:30" },
+  });
+
+  assert.ok(dayRes.suppressedSignals.includes("daytimeLocationDampened"));
+  assert.ok(dayRes.adjustedBehavioralScore < nightRes.adjustedBehavioralScore);
+  assert.ok(dayRes.contextualRiskScore < nightRes.contextualRiskScore);
+});
+
